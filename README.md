@@ -8,7 +8,8 @@
 
 ***To contact us, raise an issue on Github or via email and we will respond promptly.***
 
-[Link or badge to folder tree structure]
+***Warning - this repository is a snapshot of a repository internal to NHS England.
+This means that some links may not work for external readers.***
 
 - [Key features](#key-features)
 - [What does the pipeline do](#what-does-the-pipeline-do)
@@ -111,9 +112,6 @@ The homepage of the pipeline's documentation is [here](./documentation/pipeline_
 [Configuring the pipeline](./documentation/pipeline_README.md)
 
 [Output data specification](./documentation/CVD_prevent_tool_product-spec_v1.4_extended.2.xlsx)
-
-***Warning - this repository is a snapshot of a repository internal to NHS England.
-This means that some links may not work for external readers.***
 
 
 ## Licence
