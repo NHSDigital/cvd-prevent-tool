@@ -2,13 +2,13 @@
 
 # Outline
 
-- [Quick Start Guide](# QuickStartGuide)
-- [Configuration](# Configuration)
-- [Assets](# Assets)
-  - [Intermediate assets](# Intermediateassets)
-  - [Final assets](# Finalassets)
-- [Limitations](# Limitations)
-  - [Global Date Ranges](# GlobalDateRanges)
+- [Quick Start Guide](#QuickStartGuide)
+- [Configuration](#Configuration)
+- [Assets](#Assets)
+  - [Intermediate assets](#Intermediateassets)
+  - [Final assets](#Finalassets)
+- [Limitations](#Limitations)
+  - [Global Date Ranges](#GlobalDateRanges)
 
 
 #  Quick Start Guide
