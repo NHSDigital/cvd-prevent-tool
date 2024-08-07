@@ -32,6 +32,31 @@ res_mapping = F.create_map([F.lit(x) for x in chain(*res_dict.items())])
 
 # COMMAND ----------
 
+def store_initial_patients(
+    df: DataFrame,
+    field_pid: str = params.PID_FIELD,
+    field_dob: str = params.DOB_FIELD
+    ):
+    """store_initial_patients()
+    
+    Stores the patients from the journal table prior to any diagnostic flag processing. This
+    is saved as a dataframe, used in a final join at the end of the preprocessing function.
+
+    Args:
+        df (DataFrame): INput dataframe of journal table (prior to any preprocessing steps).
+        field_pid (str, optional): Column name containing person id/NHS Number. Defaults to params.PID_FIELD.
+        field_dob (str, optional): Column name containing date of birth. Defaults to params.DOB_FIELD.
+
+    Returns:
+        df (DataFrame): Dataframe of person_id and birth_date, each row is a distinct combination.
+    """
+    # Obtain distinct patients
+    df = df.select(field_pid,field_dob).distinct()
+    # Return
+    return df
+
+# COMMAND ----------
+
 def map_diagnosis_codes(df: DataFrame) -> DataFrame:
     df = df.withColumn(
         "diagnosis",
@@ -144,7 +169,7 @@ def filter_by_age_range(df: DataFrame) -> DataFrame:
 def ensure_cols(df: DataFrame) -> DataFrame:
   for column in params.FLAGS_TO_PROCESS:
     if column not in df.columns:
-      df = df.withColumn(f'{column}', F.lit(None))
+      df = df.withColumn(f'{column}', F.lit(None).cast('date'))
     df = df.withColumnRenamed(column, f'{column}_{params.DICT_FLAG_SUFFIX}')
   return df
 
@@ -159,14 +184,44 @@ def get_diagnostic_codes(df: DataFrame) -> DataFrame:
     df = create_parent_max_date(df)
 
     df = filter_res_dates(df)
-    
+
     return split_diagnosis_dates(df)
 
 # COMMAND ----------
 
+def join_to_initial_patients(
+    df_initial: DataFrame,
+    df_flags: DataFrame,
+    field_pid: str = params.PID_FIELD,
+    field_dob: str = params.DOB_FIELD
+    ):
+    """join_to_initial_patients()
+    
+    Joins the final diagnostic lib table to the initial patient table (output of 
+    store_initial_patients()) to produce the final table. This ensures that individuals
+    with no diagnosis date recorded (e.g. resolved date) are accounted for.
 
-def preprocess_diagnostic(df: DataFrame) -> DataFrame:
+    Args:
+        df_initial (DataFrame): DataFrame output of store_initial_patients().
+        df_flags (Dataframe): DataFrame output of preprocessing function.
+        field_pid (str, optional): Column name containing person id/NHS Number. Defaults to params.PID_FIELD.
+        field_dob (str, optional): Column name containing date of birth. Defaults to params.DOB_FIELD.
+
+    Returns:
+        df (DataFrame): DataFrame containing all initial individuals, alongside their updated diagnosis
+            dates.
+    """ 
+    # Join to original dataframe
+    df = df_initial.join(df_flags, [field_pid,field_dob], 'left')
+    # Return dataframe
+    return df
+
+# COMMAND ----------
+
+def preprocess_diagnostic(df: DataFrame, field_pid: str = params.PID_FIELD, field_dob: str = params.DOB_FIELD) -> DataFrame:
+    df_initial = store_initial_patients(df,field_pid,field_dob)
     df = filter_by_age_range(df)
     flags_df = get_diagnostic_codes(df)
     flags_df = ensure_cols(flags_df)
+    flags_df = join_to_initial_patients(df_initial,flags_df,field_pid,field_dob)
     return flags_df

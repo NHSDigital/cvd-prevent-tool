@@ -33,7 +33,7 @@ def split_and_process_htn_entries_single(
     """split_and_process_htn_entries_single
     Extracts the single (one-row-per systolic or diastolic reading) BP readings from the journal table, using SNOMED
     code identifiers. Assigns reading values to the systolic or diastolic column, respectively. Only records where
-    the first value is non-null, second value is null are kept. 
+    the first value is non-null, second value is null are kept.
 
     Args:
         df (DataFrame): Eligible cohort journal table (output of CreatePatientCohortTableStage)
@@ -168,10 +168,10 @@ def filter_bp_frames(
     age_min_value: int = params.HTN_PATIENT_MIN_AGE,
     age_max_value: int = params.PATIENT_MAX_AGE,
     bp_min_diastolic: int = params.MINIMUM_DIASTOLIC_BP,
-    bp_min_systolic: int = params.MINIMUM_SYSTOLIC_BP, 
+    bp_min_systolic: int = params.MINIMUM_SYSTOLIC_BP,
     col_age_at_event: str = params.AGE_FIELD,
     field_bp_diastolic: str = params.CVDP_DIASTOLIC_BP_READING,
-    field_bp_systolic: str = params.CVDP_SYSTOLIC_BP_READING, 
+    field_bp_systolic: str = params.CVDP_SYSTOLIC_BP_READING,
     field_calculation_date: str = params.JOURNAL_DATE_FIELD,
     field_person_dob: str = params.DOB_FIELD,
 ) -> DataFrame:
@@ -200,13 +200,13 @@ def filter_bp_frames(
 
     Returns:
         DataFrame: Dataframe contianing the filtered (valid) blood pressure measurements
-    """    
-    
+    """
+
     # Add age
     df = df.withColumn(
         col_age_at_event, age_at_date(field_person_dob, field_calculation_date)
     )
-    
+
     # Filter on age and minimum systolic and diastolic values
     df = (
         df
@@ -215,10 +215,10 @@ def filter_bp_frames(
             (F.col(col_age_at_event) <= age_max_value) &
             ((F.col(field_bp_diastolic).isNotNull() | (F.col(field_bp_systolic).isNotNull()))) &
             ((F.col(field_bp_diastolic) >= bp_min_diastolic) | (F.col(field_bp_diastolic).isNull())) &
-            ((F.col(field_bp_systolic) >= bp_min_systolic) | (F.col(field_bp_systolic).isNull()))  
+            ((F.col(field_bp_systolic) >= bp_min_systolic) | (F.col(field_bp_systolic).isNull()))
         )
     )
-    
+
     # Return dataframe
     return df
 
@@ -318,7 +318,6 @@ def keep_latest_journal_updates(
         DataFrame: Dataframe containing the minimum blood pressure readings, deduplicated to keep superseded readings (identical
             journal dates, later extraction date).
     """
-
     # Create window on patient and journal information, ordered by extraction date (latest first)
     windowval = Window.partitionBy(
         field_person_id, field_person_dob, field_date_journal
@@ -360,7 +359,7 @@ def classify_htn_risk_group(
         DataFrame: Dataframe with appended hypertension risk groups, calculated for each blood pressure reading.
     """
 
-    # Classify hypertension risk group based on risk groups outlined here https://www.nhsbenchmarking.nhs.uk/news/cvdprevent-hypertension-risk-categories
+    # Classify
     df = df.withColumn(
         col_risk_group,
         # Either measurement is None - set to None
@@ -388,23 +387,23 @@ def classify_htn_risk_group(
         # High Risk
         .when(
             (
-                ((F.col(field_bp_systolic) > 160) & (F.col(field_bp_systolic) <= 180)) | 
+                ((F.col(field_bp_systolic) > 160) & (F.col(field_bp_systolic) <= 180)) |
                 ((F.col(field_bp_diastolic) > 100) & (F.col(field_bp_diastolic) <= 120))),
                 "1c",
         )
         # Moderate Risk (< 80)
         .when(
             (
-                (F.col(field_age_at_event) < 80) & 
-                (((F.col(field_bp_systolic) > 140) & (F.col(field_bp_systolic) <= 160)) | 
+                (F.col(field_age_at_event) < 80) &
+                (((F.col(field_bp_systolic) > 140) & (F.col(field_bp_systolic) <= 160)) |
                 ((F.col(field_bp_diastolic) > 90) & (F.col(field_bp_diastolic) <= 100)))),
             "1a",
         )
         # Moderate Risk (> 80)
         .when(
             (
-                (F.col(field_age_at_event) >= 80) & 
-                ((F.col(field_bp_systolic) > 150) & (F.col(field_bp_systolic) <= 160)) | 
+                (F.col(field_age_at_event) >= 80) &
+                ((F.col(field_bp_systolic) > 150) & (F.col(field_bp_systolic) <= 160)) |
                 ((F.col(field_bp_diastolic) > 90) & (F.col(field_bp_diastolic) <= 100))),
             "1b",
         )
@@ -420,7 +419,9 @@ def format_processed_htn_output(
     df: DataFrame,
     fields_select: List[str] = params.CVDP_HTN_OUTPUT_COLUMNS,
     field_bp_date: date = params.CVDP_JOURNAL_DATE_FIELD,
-    filter_start_date: date = params.CVDP_BP_START_DATE
+    filter_start_date: date = params.CVDP_BP_START_DATE,
+    col_primary_key: str = params.RECORD_ID_FIELD,
+    fields_hashable: List[str] = params.CVDP_HTN_HASHABLE_FIELDS,
 ) -> DataFrame:
     """format_processed_htn_output
     Applies final filtering and formatting steps to the processed hypertension data
@@ -429,30 +430,38 @@ def format_processed_htn_output(
         df (DataFrame): Processed CVDP (to hypertension) dataframe
         fields_select (List[str], optional): List of column names to select for final output table.
             Defaults to params.CVDP_HTN_OUTPUT_COLUMNS.
-        field_bp_date (date, optional): Name of column containing date for measurement filtering - remove measurements prior to this. 
+        field_bp_date (date, optional): Name of column containing date for measurement filtering - remove measurements prior to this.
             Defaults to params.CVDP_JOURNAL_DATE_FIELD.
         filter_start_date (date, optional): Date value to use in filtering of field_bp_date.
             Defaults to params.CVDP_BP_START_DATE.
-
+        col_primary_key (str, optional): Column name to use when creating primary key.
+            Defaults to params.RECORD_ID_FIELD.
+        fields_hashable (List[str], optional): Column names to use as hashable fields in creation of primary key.
+            Defaults to params.CVDP_HTN_HASHABLE_FIELDS.
     Returns:
-        DataFrame: _description_
+        DataFrame: Formatted CVDP HTN table (for use in preprocess raw data stage)
     """
-    # Filter BP measurement dates - remove records prior to filter start date 
+    # Filter BP measurement dates - remove records prior to filter start date
     df = df.filter(F.col(field_bp_date) >= filter_start_date)
     # Select columns
     df = df.select(fields_select)
+    # Create unique identifier for blood pressure readings
+    df = add_hashed_key(
+        df=df,
+        col_hashed_key=col_primary_key,
+        fields_to_hash=fields_hashable
+    )
     # Return
     return df
 
 # COMMAND ----------
-
 
 def preprocess_cvdp_htn(
     df: DataFrame,
     age_min_value: int = params.HTN_PATIENT_MIN_AGE,
     age_max_value: int = params.PATIENT_MAX_AGE,
     bp_min_diastolic: int = params.MINIMUM_DIASTOLIC_BP,
-    bp_min_systolic: int = params.MINIMUM_SYSTOLIC_BP, 
+    bp_min_systolic: int = params.MINIMUM_SYSTOLIC_BP,
     codes_bp_clusters: List[str] = params.BP_SNOMED_CLUSTER,
     codes_bp_diastolic: List[str] = params.DIASTOLIC_BP_SNOMED_CODES,
     codes_bp_systolic: List[str] = params.SYSTOLIC_BP_SNOMED_CODES,
@@ -471,6 +480,8 @@ def preprocess_cvdp_htn(
     field_bp_date: date = params.CVDP_JOURNAL_DATE_FIELD,
     filter_start_date: date = params.CVDP_BP_START_DATE,
     fields_final_output: List[str] = params.CVDP_HTN_OUTPUT_COLUMNS,
+    col_primary_key: str = params.RECORD_ID_FIELD,
+    fields_hashable: List[str] = params.CVDP_HTN_HASHABLE_FIELDS,
 ) -> DataFrame:
     """preprocess_cvdp_htn
     Main prepocessing function for hypertension events, extracted from the journal table (output of CreatePatientCohortTableStage).
@@ -526,7 +537,10 @@ def preprocess_cvdp_htn(
             Defaults to params.CODE_FIELD.
         field_snomed_code (List[str], optional): List of columns to select for final output (pass to PreprocessRawDataStage).
             Defaults to params.CVDP_HTN_OUTPUT_COLUMNS.
-
+        col_primary_key (str, optional): Column name to use when creating primary key.
+            Defaults to params.RECORD_ID_FIELD.
+        fields_hashable (List[str], optional): Column names to use as hashable fields in creation of primary key.
+            Defaults to params.CVDP_HTN_HASHABLE_FIELDS.
     Returns:
         DataFrame: Processed journal table input, containing minimised, deduplicated blood pressure readings with calculated
             hypertension risk groups (per valid blood pressure measurement)
@@ -553,7 +567,7 @@ def preprocess_cvdp_htn(
 
     # Union Single and Multiple BP Dataframes
     df_comb = union_bp_frames(df_single, df_multi)
-    
+
     # Filter: Invalid age, systolic and diastolic blood pressure measurements
     df_comb = filter_bp_frames(
         df = df_comb,
@@ -596,13 +610,15 @@ def preprocess_cvdp_htn(
         field_bp_diastolic=col_diastolic,
         field_bp_systolic=col_systolic,
     )
-    
+
     # Filter dates and format columns into preprocessed asset form
     df_comb = format_processed_htn_output(
         df=df_comb,
         fields_select=fields_final_output,
         field_bp_date=field_bp_date,
-        filter_start_date=filter_start_date)
+        filter_start_date=filter_start_date,
+        col_primary_key=col_primary_key,
+        fields_hashable=fields_hashable)
 
     # Return
     return df_comb
