@@ -43,14 +43,6 @@ from typing import List, Dict, Optional
 
 # COMMAND ----------
 
-# MAGIC %run ../src/cvdp/preprocess_cvdp_smoking
-
-# COMMAND ----------
-
-# MAGIC %run ../src/pcaremeds/preprocess_pcaremeds
-
-# COMMAND ----------
-
 class PreprocessRawDataStage(PipelineStage):
   '''
   A pipeline stage that cleans and processes the raw data for saving to local area. Datasets are 
@@ -86,7 +78,6 @@ class PreprocessRawDataStage(PipelineStage):
       clean_nhs_number_fields   = [],
       clean_null_fields         = [],
       rename_field_map         = {
-        params.DARS_ID_FIELD: params.RECORD_ID_FIELD,
         params.DARS_PID_FIELD: params.PID_FIELD,
         params.DARS_DOB_FIELD: params.DOB_FIELD,
         params.DARS_SEX_FIELD: params.SEX_FIELD,
@@ -101,8 +92,8 @@ class PreprocessRawDataStage(PipelineStage):
     ## HES APC
     PreprocessStageDataEntry(
       dataset_name             = 'hes_apc',
-      db                       = params.HES_DATABASE,
-      table                    = params.HES_APC_TABLE,
+      db                       = '', #left empty as we do not need to load a raw data asset,
+      table                    = '', #instead we load a pre-existing pipeline asset.
       filter_eligible_patients = filter_fields(params.PID_FIELD, params.DOB_FIELD),
       preprocessing_func       = hes_preprocess_apc,
       validate_nhs_numbers     = False,
@@ -133,8 +124,8 @@ class PreprocessRawDataStage(PipelineStage):
     ## HES OP
     PreprocessStageDataEntry(
       dataset_name             = 'hes_op',
-      db                       = params.HES_DATABASE,
-      table                    = params.HES_OP_TABLE,
+      db                       = '', #left empty as we do not need to load a raw data asset,
+      table                    = '', #instead we load a pre-existing pipeline asset.
       filter_eligible_patients = filter_fields(params.PID_FIELD, params.DOB_FIELD),
       preprocessing_func       = hes_preprocess_op,
       validate_nhs_numbers     = False,
@@ -146,17 +137,19 @@ class PreprocessRawDataStage(PipelineStage):
         params.HES_S_OP_DOB_FIELD: params.DOB_FIELD,
         params.HES_OP_ETHNICITY_FIELD: params.ETHNICITY_FIELD,
         params.HES_OP_STARTDATE_FIELD: params.RECORD_STARTDATE_FIELD,
-        params.HES_OP_CODE_FIELD: params.CODE_FIELD,
+        params.HES_OP_TRETSPEF_FIELD: params.CODE_FIELD,
         params.HES_OP_CODE_LIST_FIELD: params.CODE_ARRAY_FIELD,
-        params.HES_S_OP_HESID_FIELD: params.HES_ID_FIELD
+        params.HES_S_OP_HESID_FIELD: params.HES_ID_FIELD,
+        params.HES_OP_LSOA_FIELD: params.LSOA_FIELD,
+        params.HES_S_OP_SEX_FIELD: params.SEX_FIELD
       },
     ),
     
     ## HES AE
     PreprocessStageDataEntry(
       dataset_name             = 'hes_ae',
-      db                       = params.HES_DATABASE,
-      table                    = params.HES_AE_TABLE,
+      db                       = '', #left empty as we do not need to load a raw data asset,
+      table                    = '', #instead we load a pre-existing pipeline asset.
       filter_eligible_patients = filter_fields(params.PID_FIELD, params.DOB_FIELD),
       preprocessing_func       = hes_preprocess_ae,
       validate_nhs_numbers     = False,
@@ -166,6 +159,8 @@ class PreprocessRawDataStage(PipelineStage):
         params.HES_AE_ID_FIELD: params.RECORD_ID_FIELD,
         params.HES_S_AE_PID_FIELD: params.PID_FIELD,
         params.HES_S_AE_DOB_FIELD: params.DOB_FIELD,
+        params.HES_AE_SEX_FIELD: params.SEX_FIELD,
+        params.HES_AE_LSOA_FIELD: params.LSOA_FIELD,
         params.HES_AE_ETHNICITY_FIELD: params.ETHNICITY_FIELD,
         params.HES_AE_STARTDATE_FIELD: params.RECORD_STARTDATE_FIELD,
         params.HES_AE_CODE_FIELD: params.CODE_FIELD,
@@ -173,7 +168,7 @@ class PreprocessRawDataStage(PipelineStage):
         params.HES_S_AE_HESID_FIELD: params.HES_ID_FIELD
       },
     ),
-        
+    
     ## DIAGNOSTIC FLAGS
     PreprocessStageDataEntry(
       dataset_name             = 'cvdp_diag_flags',
@@ -198,49 +193,6 @@ class PreprocessRawDataStage(PipelineStage):
       clean_nhs_number_fields  = [],
       clean_null_fields        = [],
       rename_field_map         = None
-    ),
-    
-    ## SMOKING
-    # SMOKING STATUS
-    PreprocessStageDataEntry(
-      dataset_name             = 'cvdp_smoking_status',
-      db                       = '', #left empty as we do not need to load a raw data asset,
-      table                    = '', #instead we load a pre-existing pipeline asset.
-      filter_eligible_patients = None,
-      preprocessing_func       = preprocess_smoking_status,
-      validate_nhs_numbers     = False,
-      clean_nhs_number_fields  = [],
-      clean_null_fields        = [],
-      rename_field_map         = None
-    ),
-    # SMOKING INTERVENTION
-    PreprocessStageDataEntry(
-      dataset_name             = 'cvdp_smoking_intervention',
-      db                       = '', #left empty as we do not need to load a raw data asset,
-      table                    = '', #instead we load a pre-existing pipeline asset.
-      filter_eligible_patients = None,
-      preprocessing_func       = extract_smoking_intervention,
-      validate_nhs_numbers     = False,
-      clean_nhs_number_fields  = [],
-      clean_null_fields        = [],
-      rename_field_map         = None
-    ),
-    
-    ## Pcaremeds
-    PreprocessStageDataEntry(
-      dataset_name             = 'pcaremeds',
-      db                       = params.PCAREMEDS_DATABASE,
-      table                    = params.PCAREMEDS_TABLE,
-      filter_eligible_patients = filter_fields(params.PID_FIELD, params.DOB_FIELD),
-      preprocessing_func       = preprocess_pcaremeds,
-      validate_nhs_numbers     = False,
-      clean_nhs_number_fields  = [],
-      clean_null_fields        = [],
-      rename_field_map         = {
-        params.PCAREMEDS_PID_FIELD: params.PID_FIELD,
-        params.PCAREMEDS_ID_FIELD: params.RECORD_ID_FIELD,
-        params.PCAREMEDS_DOB_FIELD: params.DOB_FIELD
-      },
     ),
   ]
     
@@ -270,15 +222,15 @@ class PreprocessRawDataStage(PipelineStage):
     self,
     patient_cohort_input: str,
     patient_cohort_journal_input: str,
+    hes_apc_input: str,
+    hes_ae_input: str,
+    hes_op_input: str,
     dars_output: str,
     hes_apc_output: str,
     hes_op_output: str,
     hes_ae_output: str, 
     cvdp_diag_flags_output: str,
     cvdp_htn_output: str,
-    cvdp_smoking_status_output: str,
-    cvdp_smoking_intervention_output: str,
-    pcaremeds_output: str
     ):
     '''__init__
     Each dataset defined must have a reciprocal output key. This key is passed as an argument
@@ -293,9 +245,6 @@ class PreprocessRawDataStage(PipelineStage):
       hes_apc_output (str): Pipeline key for the processed HES APC data asset.
       cvdp_diag_flags_output (str): Pipeline key for the processed CVDP-derived diagnostic flags data set.
       cvdp_htn_output (str): Pipeline key for the the processed CVDP-derived hypertension data set.
-      cvdp_smoking_status_output (str): Pipeline key for the the processed CVDP-derived smoking status data set.
-      cvdp_smoking_intervention_output (str): Pipeline key for the the processed CVDP-derived smoking intervention data set.
-      pcaremeds_output (str): Pipeline key for the processed pcaremeds data asset.
 
     Notebooks:
       params::params
@@ -306,8 +255,6 @@ class PreprocessRawDataStage(PipelineStage):
       src/hes::preprocess_hes
       src/cvdp::diagnostic_flags_lib
       src/cvdp::preprocess_cvdp_htn
-      src/cvdp::preprocess_cvdp_smoking
-      src/pcaremeds::preprocess_pcaremeds
     
     Info
       The output key (argument in __init__) must be assigned below as self._output_key = output_key
@@ -316,22 +263,22 @@ class PreprocessRawDataStage(PipelineStage):
     '''
     self._patient_cohort_input = patient_cohort_input
     self._patient_cohort_journal_input = patient_cohort_journal_input
+    self._hes_apc_input = hes_apc_input
+    self._hes_op_input = hes_op_input
+    self._hes_ae_input = hes_ae_input
     self._hes_apc_output = hes_apc_output
     self._hes_op_output = hes_op_output
     self._hes_ae_output = hes_ae_output
     self._dars_output = dars_output
     self._cvdp_diag_flags_output = cvdp_diag_flags_output
     self._cvdp_htn_output = cvdp_htn_output
-    self._cvdp_smoking_status_output = cvdp_smoking_status_output
-    self._cvdp_smoking_intervention_output = cvdp_smoking_intervention_output
-    self._pcaremeds_output = pcaremeds_output
     self._source_data_holder: Dict[str, DataFrame] = {}
     super(PreprocessRawDataStage, self).__init__(
-      {self._patient_cohort_input, self._patient_cohort_journal_input},
+      {self._patient_cohort_input, self._patient_cohort_journal_input,
+       self._hes_apc_input, self._hes_ae_input, self._hes_op_input},
       {
         self._dars_output, self._hes_op_output, self._hes_ae_output, self._hes_apc_output,
-        self._cvdp_diag_flags_output, self._cvdp_htn_output, self._cvdp_smoking_status_output,
-        self._cvdp_smoking_intervention_output, self._pcaremeds_output
+        self._cvdp_diag_flags_output, self._cvdp_htn_output,
         }
       )
     
@@ -349,8 +296,10 @@ class PreprocessRawDataStage(PipelineStage):
     log._add_stage(self.name)
     
     log._timer(self.name)
-    #LOAD JOURNAL TABLE
+    ## LOAD JOURNAL TABLE
     self._load_journal_table(context)
+    ## Load HES Tables
+    self._load_hes_tables(context)
     ## CLEAN AND PREPROCESS EACH DATASET
     self._clean_and_preprocess_raw_data()
     ## FILTER DATASETS
@@ -362,17 +311,68 @@ class PreprocessRawDataStage(PipelineStage):
     
     log._timer(self.name, end=True)
     
-    ## SAVE AND CACHE FOR WRITING
+    ## Return pipeline outputs as delta tables
     return {
-      self._hes_apc_output: PipelineAsset(self._hes_apc_output, context, df = self._source_data_holder['hes_apc'], cache = True),
-      self._hes_op_output: PipelineAsset(self._hes_op_output, context, df = self._source_data_holder['hes_op'], cache = True),
-      self._hes_ae_output: PipelineAsset(self._hes_ae_output, context, df = self._source_data_holder['hes_ae'], cache = True),
-      self._dars_output: PipelineAsset(self._dars_output, context, df = self._source_data_holder['dars_bird_deaths'], cache = True),
-      self._cvdp_diag_flags_output: PipelineAsset(self._cvdp_diag_flags_output, context, df = self._source_data_holder['cvdp_diag_flags'], cache = True),
-      self._cvdp_htn_output: PipelineAsset(self._cvdp_htn_output, context, df = self._source_data_holder['cvdp_htn'], cache = True),
-      self._cvdp_smoking_status_output: PipelineAsset(self._cvdp_smoking_status_output, context, df = self._source_data_holder['cvdp_smoking_status'], cache = True),
-      self._cvdp_smoking_intervention_output: PipelineAsset(self._cvdp_smoking_intervention_output, context, df = self._source_data_holder['cvdp_smoking_intervention'], cache = True),
-      self._pcaremeds_output: PipelineAsset(self._pcaremeds_output, context, df = self._source_data_holder['pcaremeds'], cache = True)
+      ### HES APC
+      self._hes_apc_output: PipelineAsset(
+        key = self._hes_apc_output,
+        context = context,
+        db = params.DATABASE_NAME,
+        df = self._source_data_holder['hes_apc'],
+        cache = False,
+        delta_table = True,
+        delta_columns = [params.RECORD_ID_FIELD]
+        ),
+      ### HES OP
+      self._hes_op_output: PipelineAsset(
+        key = self._hes_op_output,
+        context = context,
+        db = params.DATABASE_NAME,
+        df = self._source_data_holder['hes_op'],
+        cache = False,
+        delta_table = True,
+        delta_columns = [params.RECORD_ID_FIELD]
+        ),
+      ### HES AE
+      self._hes_ae_output: PipelineAsset(
+        key = self._hes_ae_output,
+        context = context,
+        db = params.DATABASE_NAME,
+        df = self._source_data_holder['hes_ae'],
+        cache = False,
+        delta_table = True,
+        delta_columns = [params.RECORD_ID_FIELD]
+        ),
+      ### DARS Deaths
+      self._dars_output: PipelineAsset(
+        key = self._dars_output,
+        context = context,
+        db = params.DATABASE_NAME,
+        df = self._source_data_holder['dars_bird_deaths'],
+        cache = False,
+        delta_table = True,
+        delta_columns = [params.RECORD_ID_FIELD]
+        ),
+      ### CVDP Diagnostic Flags
+      self._cvdp_diag_flags_output: PipelineAsset(
+        key = self._cvdp_diag_flags_output,
+        context = context,
+        db = params.DATABASE_NAME,
+        df = self._source_data_holder['cvdp_diag_flags'],
+        cache = False,
+        delta_table = True,
+        delta_columns = [params.PID_FIELD,params.DOB_FIELD]
+        ),
+      ### CVDP Blood Pressure and Hypertension
+      self._cvdp_htn_output: PipelineAsset(
+        key = self._cvdp_htn_output,
+        context = context,
+        db = params.DATABASE_NAME,
+        df = self._source_data_holder['cvdp_htn'],
+        cache = False,
+        delta_table = True,
+        delta_columns = [params.RECORD_ID_FIELD]
+        ),
       }
     
     
@@ -393,7 +393,20 @@ class PreprocessRawDataStage(PipelineStage):
     if 'META' in df.columns:
         df = df.drop('META')
     self._source_data_holder['journal_table'] = df
-  
+    
+    ## Load HES Tables
+  def _load_hes_tables(self,context):
+    """_load_hes_tables
+    
+    Class method: loads the HES tables and assigns these to the specific HES dataset slot in 
+    _source_data_holder
+
+    Args:
+        context (PipelineContext): Pipeline context object
+    """    
+    self._source_data_holder['hes_apc'] = context[self._hes_apc_input].df
+    self._source_data_holder['hes_ae']  = context[self._hes_ae_input].df
+    self._source_data_holder['hes_op']  = context[self._hes_op_input].df
   
   ## CLEAN AND PREPROCESS DATASETS
 
@@ -414,27 +427,19 @@ class PreprocessRawDataStage(PipelineStage):
     '''
     for data_entry in self.param_entries:
       print(f'INFO: Cleaning {data_entry.dataset_name}')
-      ## HES SPECIFIC CONDITION
-      if data_entry.db.startswith('hes'):
-        if data_entry.dataset_name.startswith('hes_ae') or data_entry.dataset_name.startswith('hes_op'):
-          hes_start_year = params.HES_5YR_START_YEAR
-        else:
-          hes_start_year = params.HES_START_YEAR
-        df_dataset = get_hes_dataframes_from_years(
-          hes_dataset_name = data_entry.table,
-          start_year = hes_start_year,
-          end_year = params.HES_END_YEAR,
-          db_hes = params.HES_DATABASE,
-          db_ahas = params.HES_AHAS_DATABASE
-          )
+      ## Conditional: HES - Load associated HES dataset
+      if data_entry.dataset_name.startswith('hes'):
+        if data_entry.dataset_name.startswith('hes_apc'):
+          df_dataset = self._source_data_holder['hes_apc']
+        elif data_entry.dataset_name.startswith('hes_ae'):
+          df_dataset = self._source_data_holder['hes_ae']
+        elif data_entry.dataset_name.startswith('hes_op'):
+          df_dataset = self._source_data_holder['hes_op']
       ## DIAGNOSTIC FLAGS SPECIFIC CONDITION
       elif data_entry.dataset_name.startswith('cvdp_diag'):
         df_dataset = self._source_data_holder['journal_table']
       ## HYPERTENSION SPECIFIC CONDITION
       elif data_entry.dataset_name.startswith('cvdp_htn'):
-        df_dataset = self._source_data_holder['journal_table']
-      ## SMOKING SPECIFIC CONDITION
-      elif data_entry.dataset_name.startswith('cvdp_smoking'):
         df_dataset = self._source_data_holder['journal_table']
       ## OTHER DATASETS
       else:

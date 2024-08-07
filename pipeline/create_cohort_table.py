@@ -3,8 +3,6 @@
 
 # COMMAND ----------
 
-import collections
-import pyspark.sql.functions as F
 import warnings
 
 from pyspark.sql import DataFrame
@@ -29,119 +27,106 @@ from pyspark.sql import DataFrame
 
 class CreatePatientCohortTableStage(PipelineStage):
   '''CreatePatientCohortTableStage
-  A pipeline stage to create the eligble patient cohort table
-  
-  Args:
-    cohort_opt (str, optional): Previously created eligible cohort table. Defaults to ''.
-  
-  Returns:
-    patient_cohort_table_output (str): Context key for the patient cohort table
-    patient_cohort_journal_output (str): Context key for the patient journal table
-  
+  A pipeline stage to create the eligble patient cohort table and associated journal table.
+  Utilises the extracted CVDP table from the ExtractCVDPDataStage.
+
+  Associated notebooks:
+    * pipeline/pipeline_util: Provides abstract classes for pipeline stages
+    * src/cvdp/preprocess_cvdp_cohort: Preprocessing function for CVDP cohort processing
+    * src/cvdp_preprocess_cvdp_journal: Preprocessing function for CVDP journal processing
   '''
-  
-  def __init__(self, patient_cohort_table_output: str, patient_cohort_journal_output: str, cohort_opt: str = ''):
+
+  def __init__(
+    self,
+    extracted_cvdp_table_input: str,
+    patient_cohort_table_output: str,
+    patient_cohort_journal_output: str
+    ):
     '''__init__
     Contains the main run() stage definition and the associated class methods.
-    
+
     Args:
-      patient_cohort_table_output (str):    Context key for the eligible patient cohort table 
+      extracted_cvdp_table_input (str)      Context key for the extracted CVDP store table
+                                            pipeline asset [input]
+      patient_cohort_table_output (str):    Context key for the eligible patient cohort table
                                             pipeline asset [output].
       patient_cohort_journal_output (str):  Context key for the eligible patient journal table
                                             pipeline asset [output].
-      
+
     Returns:
-      self.patient_cohort_table_output (DataFrame):   Eligible patient cohort table dataframe assigned 
+      self.patient_cohort_table_output (DataFrame):   Eligible patient cohort table dataframe assigned
                                                       to stage class [PipelineContext(PipelineAsset)].
-      self.patient_cohort_journal_output (DataFrame): Eligible patient journal table dataframe assigned 
+      self.patient_cohort_journal_output (DataFrame): Eligible patient journal table dataframe assigned
                                                       to stage class [PipelineContext(PipelineAsset)].
     '''
+    self.extracted_cvdp_table_input: str = extracted_cvdp_table_input
     self.patient_cohort_table_output: str = patient_cohort_table_output
     self.patient_cohort_journal_output: str = patient_cohort_journal_output
-    self._cohort_opt: str = cohort_opt
     self._data_holder: Dict[str, DataFrame] = {}
-    super(CreatePatientCohortTableStage, self).__init__(set(), {self.patient_cohort_table_output, self.patient_cohort_journal_output})
-  
-  
-  ### MAIN STAGE RUN
-  def _run(self, context, log, limit: bool = False):
-    
+    super(CreatePatientCohortTableStage, self).__init__(
+      {self.extracted_cvdp_table_input},
+      {self.patient_cohort_table_output, self.patient_cohort_journal_output})
+
+  # Main Run Statement
+  def _run(self, context, log):
+    # Initiate Logger
     log._add_stage(self.name)
-    
     log._timer(self.name)
     
-    ## COHORT TABLE - CONDITIONAL
-    table_bool = table_exists(params.DATABASE_NAME, self._cohort_opt)
-
-    ## COHORT TABLE - NOT DEFINED
-    if self._cohort_opt == '':
-      ## ELIGIBLE COHORT TABLE PROCESSING
-      self._load_cvdp_store_data()
-      self._preprocess_cvdp_store_data_cohort()
-      
-      ## LIMIT ROWS TO N RANDOM ROWS
-      if limit == True:
-        print('INFO: Pipeline Stage being Ran in Limit Mode')
-        self._limit_cohort()
-      ## ELIGIBLE JOURNAL TABLE PROCESSING
-      self._preprocess_cvdp_store_data_journal()
-      ## DATA SCHEMA PROCESSING
-      self._transform_cohort_schema()
-      self._transform_journal_schema()
-      
-      log._timer(self.name, end=True)
-      
-      return {
-        self.patient_cohort_table_output:   PipelineAsset(self.patient_cohort_table_output, context, df = self._data_holder['cohort_table'], cache = True),
-        self.patient_cohort_journal_output: PipelineAsset(self.patient_cohort_journal_output, context, df = self._data_holder['journal_table'], cache = True),
-      }
-      
-    ## COHORT TABLE - DEFINED
-    elif table_bool == True:
-      print(f'> LOADING PRE-EXISTING COHORT TABLE ({self._cohort_opt})')
-      self._data_holder["cohort_table"] = spark.table(f'{params.DATABASE_NAME}.{self._cohort_opt}')
-      # Find journal table with same hash
-      journal_table_name = match_latest_journal_table(self._cohort_opt)
-      ## LOAD PRE-EXISTING JOURNAL TABLE
-      if table_exists(params.DATABASE_NAME, journal_table_name):
-        print(f'> LOADING PRE-EXISTING JOURNAL TABLE ({self._cohort_opt})')
-        self._data_holder["journal_table"] = spark.table(f'{params.DATABASE_NAME}.{journal_table_name}')
-      ## UNABLE TO FIND JOURNAL TABLE  
-      else:
-        raise ValueError(f'[ERROR] TABLE {journal_table_name} DOES NOT EXIST IN {params.DATABASE_NAME}...\n PLEASE RERUN THE PIPELINE')
-      ## CLASS DECLARATION
-      return {
-        self.patient_cohort_table_output:   PipelineAsset(self.patient_cohort_table_output, context, df = self._data_holder["cohort_table"], cache = True),
-        self.patient_cohort_journal_output: PipelineAsset(self.patient_cohort_journal_output, context, df = self._data_holder["journal_table"], cache = True),
-      }
-
-    ## UNABLE TO FIND TABLE
-    elif table_bool == False:
-      raise ValueError(f'[ERROR] TABLE {self._cohort_opt} DOES NOT EXIST IN {params.DATABASE_NAME}...')
-
-        
-  ### METHODS
+    self._load_data_assets(context)
+    # Cohort Table Processing
+    self._preprocess_cvdp_store_data_cohort(context)
+    # Journal Table Processing
+    self._preprocess_cvdp_store_data_journal()
+    # Data Schema Processing
+    self._transform_cohort_schema()
+    self._transform_journal_schema()
+    # Hash collision checks
+    self._check_unique_identifiers_cohort()
+    self._check_unique_identifiers_journal()
+    # Stop Logger
+    log._timer(self.name, end=True)
+    # Return Keys
+    return {
+        self.patient_cohort_table_output: PipelineAsset(
+            key=self.patient_cohort_table_output,
+            context=context,
+            db=params.DATABASE_NAME,
+            df=self._data_holder['cohort_table'],
+            cache=False,
+            delta_table = True,
+            delta_columns = [params.CVDP_COHORT_PRIMARY_KEY]
+            ),
+        self.patient_cohort_journal_output: PipelineAsset(
+            key=self.patient_cohort_journal_output,
+            context=context,
+            db=params.DATABASE_NAME,
+            df=self._data_holder['journal_table'],
+            cache=False,
+            delta_table = True,
+            delta_columns = [params.CVDP_JOURNAL_PRIMARY_KEY]
+            ),
+    }
   
-  ## CVDP STORE DATA - LOAD DATA
-  def _load_cvdp_store_data(self):
-    '''_load_cvdp_store_data
-    Loads the CVDP Store assets (annual and quarterly) and assign them into the data holder dictionary.
-    '''
-    self._data_holder['cvdp_annual']     = spark.table(f'{params.CVDP_STORE_DATABASE}.{params.CVDP_STORE_ANNUAL_TABLE}')
-    self._data_holder['cvdp_quarterly']  = spark.table(f'{params.CVDP_STORE_DATABASE}.{params.CVDP_STORE_QUARTERLY_TABLE}')
   
+  # Load data assets into stage
+  def _load_data_assets(self, context):
+      """_load_data_assets
+      Loads the events table and any additional enrichment data. Stores into _data_holder.
+      """
+      self._data_holder["extracted_cvdp_store"] = context[self.extracted_cvdp_table_input].df
+  
+  # Supporting Methods
   ## CVDP STORE DATA - PREPROCESS COHORT TABLE
-  def _preprocess_cvdp_store_data_cohort(self):
-    '''
-    _preprocess_cvdp_store_data_cohort
-    Applies the preprocessing function (see src.cvdp::preprocess_cvdp) to the annual and quarterly data.
+  def _preprocess_cvdp_store_data_cohort(self, context):
+    '''_preprocess_cvdp_store_data_cohort
+    Applies the preprocessing function (see src.cvdp::preprocess_cvdp) to the extracted CVDP data.
     Returns a single CVDP Store dataframe, assigned to the data holder dictionary [cvdp_combined].
     '''
     self._data_holder['cvdp_combined'] = preprocess_cvdp_cohort(
-      cvdp_annual       = self._data_holder['cvdp_annual'],
-      cvdp_quarterly    = self._data_holder['cvdp_quarterly']
+      cvdp_extract = self._data_holder["extracted_cvdp_store"]
     )
-  
+
   ## CVDP STORE DATA - PREPROCESS JOURNAL TABLE
   def _preprocess_cvdp_store_data_journal(self):
     '''_preprocess_cvdp_store_data_journal
@@ -152,7 +137,7 @@ class CreatePatientCohortTableStage(PipelineStage):
       df              = self._data_holder['cvdp_combined'],
       add_ref_data    = params.SWITCH_CVDP_JOURNAL_ADD_REF_DATA,
     )
-    
+
   ## COHORT TABLE - SCHEMA TRANSFORMATION
   def _transform_cohort_schema(self):
     '''_transform_cohort_schema
@@ -186,27 +171,23 @@ class CreatePatientCohortTableStage(PipelineStage):
     df = df.select(params.COHORT_STAGE_JOURNAL_COLUMNS)
     # Return
     self._data_holder['journal_table'] = df
-    
-  ## TABLE LIMITER
-  def _limit_cohort(self,
-    columns: list = [params.CVDP_PID_FIELD,params.CVDP_DOB_FIELD],
-    lim_int: int = params.INTEGRATION_TEST_LIMIT):
-    """
-    Selects a random selection of 'lim_int' rows from the cohort and journal table,
-    to be used in integration testing.
-    """
-    # Select a random selection of lim_int rows
-    nhs_dob        = (self._data_holder['cvdp_combined']).select(columns).distinct()
-    cohort_count   = nhs_dob.count()
-    fraction = lim_int / cohort_count
-    #check fraction is less than 1
-    if fraction > 1:
-      fraction = 1.0
-      warnings.warn('Number of rows given to limit the cohort table by is greater than the total number of rows in' \
-                    'the cohort table. Running integration test with full cohort table. To change this please change' \
-                    f'INTEGRATION_TEST_LIMIT in params_util to less than {cohort_count}')
-    nhs_dob_random = nhs_dob.sample(fraction = fraction).limit(lim_int)
-    # Return random rows
-    self._data_holder['cvdp_combined'] = nhs_dob_random.join(self._data_holder['cvdp_combined'], on = columns, how = "left")
 
-      
+  ## Hash Collision Check
+  ### Cohort Table Check
+  def _check_unique_identifiers_cohort(self):
+      hash_check = check_unique_values(
+          df = self._data_holder['cohort_table'],
+          field_name = params.CVDP_COHORT_PRIMARY_KEY)
+      if hash_check == True:
+          pass
+      else:
+          raise Exception(f'ERROR: Non-unique hash values in Eligible Cohort Table. Pipeline stopped, check hashable fields.')
+  ### Journal Table Check
+  def _check_unique_identifiers_journal(self):
+      hash_check = check_unique_values(
+          df = self._data_holder['journal_table'],
+          field_name = params.CVDP_JOURNAL_PRIMARY_KEY)
+      if hash_check == True:
+          pass
+      else:
+          raise Exception(f'ERROR: Non-unique hash values in Eligible Cohort Journal Table. Pipeline stopped, check hashable fields.')
