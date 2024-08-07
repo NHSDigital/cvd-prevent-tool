@@ -23,8 +23,6 @@ from dsp.validation.validator import compare_results
 
 suite = FunctionTestSuite()
 
-## The following are fake people and data created for test purposes
-
 # COMMAND ----------
 
 TEST_EVENT_DATA_ENTRY = EventsStageDataEntry(
@@ -54,15 +52,18 @@ TEST_EVENT_DATA_ENTRY = EventsStageDataEntry(
 
 @suite.add_test
 def test_transform_data_to_schema_and_combine():
-    
+
     # CUSTOM FUNCTION TEST DEFINITION
     def make_lower_case(df: DataFrame):
         return df.withColumn('code', F.lower(F.col('code')))
 
+    def filter_unplanned(df: DataFrame):
+        return df.filter(F.col('unplanned_flag') == 1)
+
     # TEST PARAMETERS
     @dataclass(frozen = True)
     class TestParams(ParamsBase):
-        DATASETS  = ['test_ds1', 'hes_test_ds2']
+        DATASETS  = ['test_ds1', 'hes_apc_test_ds2']
         DATABASE_NAME = None
         PID_FIELD = 'person_id'
         DOB_FIELD = 'birth_date'
@@ -107,7 +108,7 @@ def test_transform_data_to_schema_and_combine():
       T.StructField('rec_end', T.DateType(), True),
       T.StructField('code', T.StringType(), False),
       T.StructField('flag', T.StringType(), False),
-      T.StructField('date_of_test', T.DateType(), False),
+      T.StructField('date_of_frog', T.DateType(), False),
       T.StructField('dataset', T.StringType(), False),
       T.StructField('code_array', T.ArrayType(T.StringType()), True),
       T.StructField('flag_array', T.ArrayType(T.StringType()), True),
@@ -126,13 +127,13 @@ def test_transform_data_to_schema_and_combine():
     ], input_schema_ds1)
 
     df_input_ds2 = spark.createDataFrame([
-        ('001', '10011', date(2001,1,1), date(2001,2,2), 'AA', 'FA', date(1901,1,1), 'hes_test_ds2', [None], [None], [None]),
-        ('002', '20011', date(2002,1,1), date(2002,2,2), 'BB', 'FB', date(1902,1,1), 'hes_test_ds2', ['test'], [None], [None]),
-        ('002', '20012', date(2002,1,1), date(2002,2,2), 'CC', 'F2', date(1902,1,1), 'hes_test_ds2', [None], ['test'], [None]),
-        ('003', '30011', date(2003,1,1), date(2003,2,2), 'DD', 'FC', date(1903,1,1), 'hes_test_ds2', [None], [None], ['test']),
-        ('003', '30012', date(2003,1,1), date(2003,2,2), 'EE', 'FD', date(1903,1,1), 'hes_test_ds2', [None], ['test'], [None]),
-        ('003', '30013', date(2003,1,1), None, 'FF', 'FE', date(1903,1,1), 'hes_test_ds2', ['test'], [None], ['test']),
-        ('004', '40011', date(2000,1,1), date(2000,2,2), 'GG', 'FE', date(1904,1,1), 'hes_test_ds2', ['test'], ['test'], ['test']),
+        ('001', '10011', date(2001,1,1), date(2001,2,2), 'AA', 'FA', date(1901,1,1), 'hes_apc_test_ds2', [None], [None], [None]),
+        ('002', '20011', date(2002,1,1), date(2002,2,2), 'BB', 'FB', date(1902,1,1), 'hes_apc_test_ds2', ['frog'], [None], [None]),
+        ('002', '20012', date(2002,1,1), date(2002,2,2), 'CC', 'F2', date(1902,1,1), 'hes_apc_test_ds2', [None], ['frog'], [None]),
+        ('003', '30011', date(2003,1,1), date(2003,2,2), 'DD', 'FC', date(1903,1,1), 'hes_apc_test_ds2', [None], [None], ['frog']),
+        ('003', '30012', date(2003,1,1), date(2003,2,2), 'EE', 'FD', date(1903,1,1), 'hes_apc_test_ds2', [None], ['frog'], [None]),
+        ('003', '30013', date(2003,1,1), None, 'FF', 'FE', date(1903,1,1), 'hes_apc_test_ds2', ['frog'], [None], ['frog']),
+        ('004', '40011', date(2000,1,1), date(2000,2,2), 'GG', 'FE', date(1904,1,1), 'hes_apc_test_ds2', ['frog'], ['frog'], ['frog']),
     ], input_schema_ds2)
 
     expected_schema = T.StructType([
@@ -155,20 +156,20 @@ def test_transform_data_to_schema_and_combine():
     ])
 
     df_expected = spark.createDataFrame([
-        ('001',date(1901,1,1),100,'sex','test_ds1','tests','10001',date(2001,1,1), date(2001,2,2),'test_1','A','A','F1', [None], [None], [None]),
-        ('002',date(1902,1,1),100,'sex','test_ds1','tests','20001',date(2002,1,1), date(2002,2,2),'test_1','A','B','F2', ['A'], [None], [None]),
-        ('002',date(1902,1,1),100,'sex','test_ds1','tests','20002',date(2002,1,1), date(2002,2,2),'test_1','A','C','F3', [None], ['B'], [None]),
-        ('003',date(1903,1,1),100,'sex','test_ds1','tests','30001',date(2003,1,1), date(2003,2,2),'test_1','A','D','F4', ['A'], ['B'], [None]),
-        ('003',date(1903,1,1),100,'sex','test_ds1','tests','30002',date(2003,1,1), date(2003,2,2),'test_1','A','E','F5', [None], ['A'], ['B']),
-        ('003',date(1903,1,1),100,'sex','test_ds1','tests','30003',date(2003,1,1), date(2003,2,2),'test_1','A','F','F6', ['A'], ['B'], ['C']),
-        ('004',date(1904,1,1),96,'sex','test_ds1','tests','40001',date(2000,1,1), date(2000,2,2),'test_1','A','G','F7', ['A','B'], [None], ['C','D']),
-        ('001',date(1901,1,1),100,None,'hes_test_ds2','episodes','10011',date(2001,1,1), date(2001,2,2),None,'B','aa','FA',[None], [None], [None]),
-        ('002',date(1902,1,1),100,None,'hes_test_ds2','episodes','20011',date(2002,1,1), date(2002,2,2),None,'B','bb','FB',['test'], [None], [None]),
-        ('002',date(1902,1,1),100,None,'hes_test_ds2','episodes','20012',date(2002,1,1), date(2002,2,2),None,'B','cc','F2',[None], ['test'], [None]),
-        ('003',date(1903,1,1),100,None,'hes_test_ds2','episodes','30011',date(2003,1,1), date(2003,2,2),None,'B','dd','FC',[None], [None], ['test']),
-        ('003',date(1903,1,1),100,None,'hes_test_ds2','episodes','30012',date(2003,1,1), date(2003,2,2),None,'B','ee','FD',[None], ['test'], [None]),
-        ('003',date(1903,1,1),100,None,'hes_test_ds2','episodes','30013',date(2003,1,1), None,None,'B','ff','FE',['test'], [None], ['test']),
-        ('004',date(1904,1,1),96,None,'hes_test_ds2','episodes','40011',date(2000,1,1), date(2000,2,2),None,'B','gg','FE',['test'], ['test'], ['test']),
+        ('001',date(1901,1,1),100,'sex','test_ds1','tests','10001',date(2001,1,1), date(2001,2,2),'froggyland','A','A','F1', [None], [None], [None]),
+        ('002',date(1902,1,1),100,'sex','test_ds1','tests','20001',date(2002,1,1), date(2002,2,2),'froggyland','A','B','F2', ['A'], [None], [None]),
+        ('002',date(1902,1,1),100,'sex','test_ds1','tests','20002',date(2002,1,1), date(2002,2,2),'froggyland','A','C','F3', [None], ['B'], [None]),
+        ('003',date(1903,1,1),100,'sex','test_ds1','tests','30001',date(2003,1,1), date(2003,2,2),'froggyland','A','D','F4', ['A'], ['B'], [None]),
+        ('003',date(1903,1,1),100,'sex','test_ds1','tests','30002',date(2003,1,1), date(2003,2,2),'froggyland','A','E','F5', [None], ['A'], ['B']),
+        ('003',date(1903,1,1),100,'sex','test_ds1','tests','30003',date(2003,1,1), date(2003,2,2),'froggyland','A','F','F6', ['A'], ['B'], ['C']),
+        ('004',date(1904,1,1),96,'sex','test_ds1','tests','40001',date(2000,1,1), date(2000,2,2),'froggyland','A','G','F7', ['A','B'], [None], ['C','D']),
+        ('001',date(1901,1,1),100,None,'hes_apc_test_ds2','episodes','10011',date(2001,1,1), date(2001,2,2),None,'B','aa','FA',[None], [None], [None]),
+        ('002',date(1902,1,1),100,None,'hes_apc_test_ds2','episodes','20011',date(2002,1,1), date(2002,2,2),None,'B','bb','FB',['frog'], [None], [None]),
+        ('002',date(1902,1,1),100,None,'hes_apc_test_ds2','episodes','20012',date(2002,1,1), date(2002,2,2),None,'B','cc','F2',[None], ['frog'], [None]),
+        ('003',date(1903,1,1),100,None,'hes_apc_test_ds2','episodes','30011',date(2003,1,1), date(2003,2,2),None,'B','dd','FC',[None], [None], ['frog']),
+        ('003',date(1903,1,1),100,None,'hes_apc_test_ds2','episodes','30012',date(2003,1,1), date(2003,2,2),None,'B','ee','FD',[None], ['frog'], [None]),
+        ('003',date(1903,1,1),100,None,'hes_apc_test_ds2','episodes','30013',date(2003,1,1), None,None,'B','ff','FE',['frog'], [None], ['frog']),
+        ('004',date(1904,1,1),96,None,'hes_apc_test_ds2','episodes','40011',date(2000,1,1), date(2000,2,2),None,'B','gg','FE',['frog'], ['frog'], ['frog']),
     ], expected_schema)
 
     # DATA AND STAGE SETUP
@@ -182,7 +183,6 @@ def test_transform_data_to_schema_and_combine():
     # STAGE INITIALISATION
     stage = CreateEventsTableStage(cvdp_cohort_input = None,
                                    cvdp_htn_input = None,
-                                   cvdp_smoking_status_input = None,
                                    dars_input = 'DS1',
                                    hes_apc_input = 'DS2',
                                    events_table_output = 'OUTPUT')
@@ -207,7 +207,7 @@ def test_transform_data_to_schema_and_combine():
                   record_id_field = 'rec_id',
                   record_start_date_field = 'rec_start',
                   record_end_date_field = 'rec_end',
-                  lsoa_field = F.lit('test_1'),
+                  lsoa_field = F.lit('froggyland'),
                   ethnicity_field = F.lit('A'),
                   code_field = 'code',
                   flag_field = 'flag',
@@ -217,12 +217,12 @@ def test_transform_data_to_schema_and_combine():
                   )),
           ## TEST DF 2
           EventsStageDataEntry(
-              dataset_name = 'hes_test_ds2',
+              dataset_name = 'hes_apc_test_ds2',
               context_key = 'DS2',
               processing_func = make_lower_case,
               mapping = EventsStageColumnMapping(
                   pid_field = 'pid',
-                  dob_field = (params.DOB_FIELD, partial(ensure_dob, dob_col = 'date_of_test', ts_col = 'rec_start', max_age_year = 130)),
+                  dob_field = (params.DOB_FIELD, partial(ensure_dob, dob_col = 'date_of_frog', ts_col = 'rec_start', max_age_year = 130)),
                   age_field = (params.AGE_FIELD, partial(add_age_from_dob_at_date, dob_col = params.DOB_FIELD, at_date_col = 'rec_start', max_age_year = 130)),
                   sex_field = None,
                   dataset_field = 'dataset',
@@ -249,102 +249,184 @@ def test_transform_data_to_schema_and_combine():
 
 @suite.add_test
 def test_format_events_table():
-    
-    stage = CreateEventsTableStage(None, None, None, None, None, None)
+
+    stage = CreateEventsTableStage(None, None, None, None, None)
     stage._output_fields = ['pid','date','code']
-    
+
     df_events = spark.createDataFrame([
         ('001','A',date(2000,1,1),'foo')
     ], ['pid','code','date','bar'])
-    
+
     df_expected = spark.createDataFrame([
         ('001',date(2000,1,1),'A')
     ], ['pid','date','code'])
-    
-    stage._events_data = df_events 
+
+    stage._events_data = df_events
     stage._format_events_table()
     df_actual = stage._events_data
     assert compare_results(df_actual, df_expected, join_columns = ['pid'])
-    
-    
+
+
 
 # COMMAND ----------
 
 @suite.add_test
 def test_check_events_table_non_null():
-    
-    stage = CreateEventsTableStage(None,None,None,None,None,None)
-    
+
+    stage = CreateEventsTableStage(None,None,None,None,None)
+
     df_input = spark.createDataFrame([
         ('001', date(2001,1,1), 'foo_1'),
         ('002', date(2002,1,1), 'foo_2'),
         ('003', date(2003,1,1), 'foo_3'),
         ('004', date(2004,1,1), 'foo_4'),
     ], [params.PID_FIELD,params.DOB_FIELD,'BAR'])
-    
+
     stage._events_data = df_input
     stage._check_events_table()
 
     assert stage._data_check_rec['pid'] == 0
     assert stage._data_check_rec['dob'] == 0
-    
+
 
 # COMMAND ----------
 
 @suite.add_test
 def test_check_events_table_pid_null():
-    
-    stage = CreateEventsTableStage(None,None,None,None,None,None)
-    
+
+    stage = CreateEventsTableStage(None,None,None,None,None)
+
     df_input = spark.createDataFrame([
         ('001', date(2001,1,1), 'foo_1'),
         (None, date(2002,1,1), 'foo_2'),
     ], [params.PID_FIELD,params.DOB_FIELD,'BAR'])
-    
+
     stage._events_data = df_input
     stage._check_events_table()
 
     assert stage._data_check_rec['pid'] == 1
     assert stage._data_check_rec['dob'] == 0
-    
+
 
 # COMMAND ----------
 
 @suite.add_test
 def test_check_events_table_dob_null():
-    
-    stage = CreateEventsTableStage(None,None,None,None,None,None)
-    
+
+    stage = CreateEventsTableStage(None,None,None,None,None)
+
     df_input = spark.createDataFrame([
         ('001', date(2001,1,1), 'foo_1'),
         ('002', None, 'foo_2'),
     ], [params.PID_FIELD,params.DOB_FIELD,'BAR'])
-    
+
     stage._events_data = df_input
     stage._check_events_table()
 
     assert stage._data_check_rec['pid'] == 0
     assert stage._data_check_rec['dob'] == 1
-    
+
 
 # COMMAND ----------
 
 @suite.add_test
 def test_check_events_table_both_null():
-    
-    stage = CreateEventsTableStage(None,None,None,None,None,None)
-    
+
+    stage = CreateEventsTableStage(None,None,None,None,None)
+
     df_input = spark.createDataFrame([
         ('001', date(2001,1,1), 'foo_1'),
         ('002', None, 'foo_2'),
         (None, date(2003,1,1), 'foo_3')
     ], [params.PID_FIELD,params.DOB_FIELD,'BAR'])
-    
+
     stage._events_data = df_input
     stage._check_events_table()
 
     assert stage._data_check_rec['pid'] == 1
     assert stage._data_check_rec['dob'] == 1
+
+# COMMAND ----------
+
+@suite.add_test
+def test_check_unique_identifiers_events_pass():
+    '''test_check_unique_identifiers_events_pass
+    create_events_table::CreateEventsTableStage._check_unique_identifiers_events()
+    Tests checking of unqiue values in the record identifier field in the events table.
+    Test will pass if no error is raised (all values unique).
+    '''
+    # Setup Test Parameters
+    @dataclass(frozen = True)
+    class TestParams(ParamsBase):
+        RECORD_ID_FIELD = 'test_record_id'
+    test_params = TestParams()
+
+    # Setup Test Data
+    ## Input
+    df_input = spark.createDataFrame([
+        (1,'a1'),
+        (2,'a2'),
+        (3,'a3')
+    ], ['idx', 'test_record_id'])
+
+    # Stage Test
+    with FunctionPatch('params',test_params):
+        stage = CreateEventsTableStage(
+            cvdp_cohort_input = None,
+            cvdp_htn_input = None,
+            dars_input = None,
+            hes_apc_input = None,
+            events_table_output = None
+            )
+        stage._events_data = df_input
+        try:
+            stage._check_unique_identifiers_events()
+            result = True
+        except:
+            result = False
+            raise Exception('test_check_unique_identifiers_events_pass failed')
+    assert result == True
+
+# COMMAND ----------
+
+@suite.add_test
+def test_check_unique_identifiers_events_fail():
+    '''test_check_unique_identifiers_events_fail
+    create_events_table::CreateEventsTableStage._check_unique_identifiers_events()
+    Tests checking of unqiue values in the record identifier field in the events table.
+    Test will pass if an error is raised (presence of non-unique values).
+    '''
+    # Setup Test Parameters
+    @dataclass(frozen = True)
+    class TestParams(ParamsBase):
+        RECORD_ID_FIELD = 'test_record_id'
+    test_params = TestParams()
+
+    # Setup Test Data
+    ## Input
+    df_input = spark.createDataFrame([
+        (1,'a1'),
+        (2,'a2'),
+        (3,'a2')
+    ], ['idx', 'test_record_id'])
+
+    # Stage Test
+    with FunctionPatch('params',test_params):
+        stage = CreateEventsTableStage(
+            cvdp_cohort_input = None,
+            cvdp_htn_input = None,
+            dars_input = None,
+            hes_apc_input = None,
+            events_table_output = None
+            )
+        stage._events_data = df_input
+        try:
+            stage._check_unique_identifiers_events()
+            result = False
+            raise Exception('test_check_unique_identifiers_events_fail failed')
+        except:
+            result = True
+    assert result == True
 
 # COMMAND ----------
 

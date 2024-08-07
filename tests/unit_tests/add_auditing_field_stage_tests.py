@@ -15,8 +15,6 @@ from pyspark.sql.types import StructType, StructField, IntegerType, StringType, 
 
 suite = FunctionTestSuite()
 
-## The following are fake people and data created for test purposes
-
 # COMMAND ----------
 
 @dataclass(frozen=True)
@@ -30,13 +28,13 @@ class TestParams(ParamsBase):
 
 @suite.add_test
 def test_add_auditing_field_stage():
-  
+
   class TestPipelineStage(PipelineStage):
 
     def __init__(self, input_a):
       self._input_a = input_a
       super(TestPipelineStage, self).__init__({self._input_a}, {})
-      
+
     def _run(self, context, log):
       return
 
@@ -89,15 +87,15 @@ def test_add_auditing_field_stage():
   context['INPUT_A'] = PipelineAsset('INPUT_A', context, df_input)
 
   context = add_auditing_stage.run(context, log)
-  
+
   df_actual = context['INPUT_A'].df
-  
+
   assert 'sampling' in df_actual.schema['META'].dataType.names
-  
+
   actual_outside_range_size = df_actual.where(
     (df_actual.META.sampling < 0) & (df_actual.META.sampling > 1))
   assert actual_outside_range_size.count() == 0
-  
+
   struct_cols = df_actual.schema['META'].dataType.names
   struct_cols.remove('sampling')
   df_actual = df_actual.withColumn('META',F.struct(*([col('META')[c].alias(c) for c in struct_cols])))
@@ -108,7 +106,7 @@ def test_add_auditing_field_stage():
 
 @suite.add_test
 def test_add_auditing_field_stage_meta_already_exists():
-  
+
   df_input = spark.createDataFrame([
     (0, 'a', 't'),
     (1, 'b', 'q'),

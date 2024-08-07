@@ -28,55 +28,53 @@ suite = FunctionTestSuite()
 
 # COMMAND ----------
 
-## The following are fake people and data created for test purposes
-
 @suite.add_test
 def test_format_base_patient_table_schema():
-  
+
   input_schema = T.StructType([
         T.StructField('idx', T.StringType(), False),
         T.StructField('pid', T.StringType(), False),
         T.StructField('info', T.StringType(), False),
         T.StructField('ids', T.ArrayType(T.StringType()), True)
     ])
-  
+
   expected_schema = T.StructType([
         T.StructField('idx', T.StringType(), False),
         T.StructField('pid', T.StringType(), False),
         T.StructField('flag', T.StringType(), False),
         T.StructField('ids', T.StringType(), True)
     ])
-  
+
   df_input = spark.createDataFrame([
     (0, 'A', '1', ['A']),
     (1, 'B', '2', ['B']),
     (2, 'C', '3', [None]),
   ], input_schema)
-  
+
   df_expected = spark.createDataFrame([
     (0, 'A', '1', 'A'),
     (1, 'B', '2', 'B'),
     (2, 'C', '3', '')
   ], expected_schema)
-  
+
   df_actual = format_base_patient_table_schema(
     df = df_input,
     mapping_cols = {'info':'flag'},
     field_practice_identifier = 'ids'
   )
-  
+
   assert compare_results(df_actual, df_expected, join_columns=['idx'])
-  
+
 
 # COMMAND ----------
 
 @suite.add_test
 def test_extract_patient_events():
   '''test_extract_patient_events
-  
+
   Test of extract_patient_events() - filters to only keep cohort events
   '''
-  
+
   # Input data schema - events table
   input_schema = T.StructType([
       T.StructField('person_id', T.StringType(), False),
@@ -87,7 +85,7 @@ def test_extract_patient_events():
       T.StructField('record_date', T.DateType(), False),
       T.StructField('code_array', T.ArrayType(T.StringType()), False)
   ])
-  
+
   # Expected data schema - patient table
   expected_schema = T.StructType([
       T.StructField('person_id', T.StringType(), False),
@@ -98,7 +96,7 @@ def test_extract_patient_events():
       T.StructField('record_date', T.DateType(), False),
       T.StructField('code_array', T.ArrayType(T.StringType()), False)
   ])
-  
+
   # Input data - events table
   df_input = spark.createDataFrame([
       ('001',date(2001,1,1),'test_cohort','test_extract','CVD001',date(2010,1,1), ['P0001']), # (001) Keep
@@ -114,7 +112,7 @@ def test_extract_patient_events():
       ('005',date(2005,1,1),'test_other','test_other','B5',date(2011,1,1), ['C','D','E']),    # (005) Remove
       ('005',date(2005,1,1),'test_other','test_other','C5',date(2012,1,1), ['F']),            # (005) Remove
   ], input_schema)
-  
+
   # Expected data - patient table with cohort events (and latest) only
   df_expected = spark.createDataFrame([
     ('001',date(2001,1,1),'test_cohort','test_extract','CVD001',date(2010,1,1), ['P0001']),
@@ -125,15 +123,15 @@ def test_extract_patient_events():
     ('004',date(2004,1,1),'test_cohort','test_extract','CVD001',date(2010,1,1), ['P0000']),
     ('004',date(2004,1,1),'test_cohort','test_extract','CVD001',date(2011,1,1), ['P0001']),
   ], expected_schema)
-  
+
   df_actual = extract_patient_events(
     df = df_input,
     value_dataset = 'test_cohort',
-    value_category = 'test_extract', 
+    value_category = 'test_extract',
     field_dataset = 'dataset',
     field_category = 'category'
   )
-  
+
   assert compare_results(df_actual, df_expected, join_columns=['person_id','birth_date','record_date'])
 
 # COMMAND ----------
@@ -141,14 +139,14 @@ def test_extract_patient_events():
 @suite.add_test
 def test_add_stroke_mi_information_keepAll():
   """test_add_stroke_mi_information_keepAll()
-  
-  Testing of the add_stroke_mi_information() function, where all patient's are kept (dead, alive) and 
+
+  Testing of the add_stroke_mi_information() function, where all patient's are kept (dead, alive) and
   date of death filtering is set to inclusive (less than or equal to date of death).
-  
+
   Variables:
     keep_nulls == True
     keep_inclusive == True
-  
+
   Associated:
     pipeline/create_patient_table_lib::add_stroke_mi_information()
   """
@@ -209,13 +207,13 @@ def test_add_stroke_mi_information_keepAll():
     # Patient 4 (Has Died, Invalid Records)
     (4,date(2004,4,4),date(2024,1,2),'mi',None),                        # Remove - After Death
     # Patient 5 (Alive, Valid and Invalid Records)
-    (5,date(2005,5,5),date(2015,1,1),'multiple',['mi','stroke']),       # Keep 
+    (5,date(2005,5,5),date(2015,1,1),'multiple',['mi','stroke']),       # Keep
     (5,date(2005,5,5),date(2015,1,1),'multiple',['no_cvd','hf']),       # Remove - No valid flags
     # Patient 6 (Alive, Invalid Records)
     (6,date(2006,6,6),date(2016,1,1),'hf',None),                        # Remove - No valid flags
     # Patient 7 (Alive, No Records)
   ], input_schema_events)
-  
+
   # Expected DataFrame
   df_expected = spark.createDataFrame([
     # person_id | birth_date | stroke_count | max_stroke_date | mi_count | max_mi_date | date_of_death
@@ -227,7 +225,7 @@ def test_add_stroke_mi_information_keepAll():
     (6,date(2006,6,6),0,None,0,None,None),                                # Expected: No Stroke, No MI
     (7,date(2007,7,7),0,None,0,None,None),                                # Expected: No Stroke, No MI
   ], expected_schema)
-  
+
   # Actual DataFrame
   df_actual = add_stroke_mi_information(
     patient_table = df_patient_input,
@@ -247,24 +245,24 @@ def test_add_stroke_mi_information_keepAll():
     value_flag_mi = 'mi',
     value_flag_stroke = 'stroke',
   )
-  
+
   # Result comparison
   assert compare_results(df_actual, df_expected, join_columns=['person_id', 'birth_date'])
-  
+
 
 # COMMAND ----------
 
 @suite.add_test
 def test_add_stroke_mi_information_keepBeforeDeathOnly():
   """test_add_stroke_mi_information_keepBeforeDeathOnly()
-  
-  Testing of the add_stroke_mi_information() function, where all patient's are kept (dead, alive) and 
+
+  Testing of the add_stroke_mi_information() function, where all patient's are kept (dead, alive) and
   date of death filtering is set to exclusive (less than the date of death).
-  
+
   Variables:
     keep_nulls == True
     keep_inclusive == False
-  
+
   Associated:
     pipeline/create_patient_table_lib::add_stroke_mi_information()
   """
@@ -331,7 +329,7 @@ def test_add_stroke_mi_information_keepBeforeDeathOnly():
     (6,date(2006,6,6),date(2016,1,1),'hf',None),                        # Remove - No valid flags
     # Patient 7 (Alive, No Records)
   ], input_schema_events)
-  
+
   # Expected DataFrame
   df_expected = spark.createDataFrame([
     # person_id | birth_date | stroke_count | max_stroke_date | mi_count | max_mi_date | date_of_death
@@ -343,7 +341,7 @@ def test_add_stroke_mi_information_keepBeforeDeathOnly():
     (6,date(2006,6,6),0,None,0,None,None),                      # Expected: No Stroke, No MI
     (7,date(2007,7,7),0,None,0,None,None),                      # Expected: No Stroke, No MI
   ], expected_schema)
-  
+
   # Actual DataFrame
   df_actual = add_stroke_mi_information(
     patient_table = df_patient_input,
@@ -363,24 +361,24 @@ def test_add_stroke_mi_information_keepBeforeDeathOnly():
     value_flag_mi = 'mi',
     value_flag_stroke = 'stroke',
   )
-  
+
   # Result comparison
   assert compare_results(df_actual, df_expected, join_columns=['person_id', 'birth_date'])
-  
+
 
 # COMMAND ----------
 
 @suite.add_test
 def test_add_stroke_mi_information_keepBeforeDeathAndDeadOnly():
   """test_add_stroke_mi_information_keepBeforeDeathAndDeadOnly()
-  
-  Testing of the add_stroke_mi_information() function, where only dead patient's records are kept 
+
+  Testing of the add_stroke_mi_information() function, where only dead patient's records are kept
   and date of death filtering is set to exclusive (less than the date of death).
-  
+
   Variables:
     keep_nulls == False
     keep_inclusive == False
-  
+
   Associated:
     pipeline/create_patient_table_lib::add_stroke_mi_information()
   """
@@ -447,7 +445,7 @@ def test_add_stroke_mi_information_keepBeforeDeathAndDeadOnly():
     (6,date(2006,6,6),date(2016,1,1),'hf',None),                        # Remove - Alive
     # Patient 7 (Alive, No Records)
   ], input_schema_events)
-  
+
   # Expected DataFrame
   df_expected = spark.createDataFrame([
     # person_id | birth_date | stroke_count | max_stroke_date | mi_count | max_mi_date | date_of_death
@@ -459,7 +457,7 @@ def test_add_stroke_mi_information_keepBeforeDeathAndDeadOnly():
     (6,date(2006,6,6),0,None,0,None,None),                      # Expected: No Stroke, No MI
     (7,date(2007,7,7),0,None,0,None,None),                      # Expected: No Stroke, No MI
   ], expected_schema)
-  
+
   # Actual DataFrame
   df_actual = add_stroke_mi_information(
     patient_table = df_patient_input,
@@ -479,7 +477,7 @@ def test_add_stroke_mi_information_keepBeforeDeathAndDeadOnly():
     value_flag_mi = 'mi',
     value_flag_stroke = 'stroke',
   )
-  
+
   # Result comparison
   assert compare_results(df_actual, df_expected, join_columns=['person_id', 'birth_date'])
 
@@ -494,7 +492,7 @@ def test_add_under_75_flag():
     (4, date(1990,1,1),date(2022,12,20), None),          # should not have a flag because no STROKE or MI
   ]
   ,['person_id', 'birth_date', 'date_of_death', 'death_flag'])
-  
+
   df_expected = spark.createDataFrame([
     (1, date(2000,1,1),date(2022,12,20), 'DIED_UNDER_75', 'STROKE'),
     (2, date(1900,1,1),date(2022,12,20), None           , 'HEARTATTACK'),
@@ -504,7 +502,7 @@ def test_add_under_75_flag():
   ,['person_id', 'birth_date', 'date_of_death', 'death_age_flag', 'death_flag'])
 
   df_actual = add_under_age_flag(df_input, 75, 'birth_date', 'date_of_death', 'death_age_flag', 'DIED_UNDER_75', 'death_flag', True)
-  
+
   assert compare_results(df_actual, df_expected, join_columns=['person_id', 'birth_date'])
 
 # COMMAND ----------
@@ -512,54 +510,54 @@ def test_add_under_75_flag():
 @suite.add_test
 def test_add_30_days_flag():
   df_hes_input = spark.createDataFrame([
-    
+
     #PERSON 1 HAS 2 HEART ATTACKS HOSPITALISATIONS, 1 MONTH APART
     (1,'episode',date(2000,1,1), date(2022,2,1), 'HEARTATTACK'),
     (1,'episode',date(2000,1,1), date(2022,1,1) , 'HEARTATTACK'),
-    
+
     #PERSON 2 HAS NO HOSPITALISATIONS + A DUPLICATE
-    (2,'episode',date(2020,1,1), None           , None), 
-    (2,'episode',date(2020,1,1), None           , None), 
-    
+    (2,'episode',date(2020,1,1), None           , None),
+    (2,'episode',date(2020,1,1), None           , None),
+
     #PERSON 3 WAS HOPITALISED BUT WITH NO FLAG
     (3,'episode',date(1900,1,1), date(2020,8,1) , None),
-    
+
     #PERSON 4 IS HOSPITALISED 3 TIMES, ALL OVER A MONTH APART
     (4,'episode',date(1990,1,1), date(2001,1,1) , None),
     (4,'episode',date(1990,1,1), date(2002,2,2) , 'HEARTATTACK'),
     (4,'episode',date(1990,1,1), date(2003,3,3) , 'STROKE'),
-    
+
     #PERSON 5 HAD A HEART ATTACK BEFORE DEATH WITHIN 30 DAYS, AND A STROKE AFTER DEATH
     (5,'episode',date(1970,1,1), date(2019,12,2), 'NO_CVD'),#31 days before
     (5,'episode',date(1970,1,1), date(2019,12,3), 'HEARTATTACK'), #30 days before, had a heart attack before death
     (5,'episode',date(1970,1,1), date(2024,1,1), 'STROKE'), #had a stroke after death
-    
+
     #PERSON 6 HAD 2 HEART ATTACK HOSPITALISATIONS WITHIN 30 BEFORE DEATH, AND A STROKE AFTER DEATH
     (6,'episode',date(1970,1,1), date(2019,12,9), 'HEARTATTACK'),
     (6,'episode',date(1970,1,1), date(2020,1,5), 'HEARTATTACK'),
     (6,'episode',date(1970,1,1), date(2024,1,1), 'STROKE'),
-    
+
     #PERSON 7 HAD A HEARTATTACK AND A STROKE BEFORE DEATH, WITHIN 30 DAYS
     (7,'episode',date(1970,1,1), date(2020,1,5), 'HEARTATTACK'),
     (7,'episode',date(1970,1,1), date(2020,1,5), 'STROKE'),
-    
+
     #PERSON 8 IS HOSPITALISED WITH NO DEATH
     (8,'episode',date(1970,1,1), date(2020,1,5), 'HEARTATTACK'),
-    
+
     #PERSON 9 DOES NOT HAVE ANY RECORD
-    
+
     #PERSON 11 HAD A STROKE THEN A HEARTATTACK BEFORE DEATH, WITHIN 30 DAYS
     (10,'episode',date(1970,1,1), date(2020,1,4), 'STROKE'),
     (10,'episode',date(1970,1,1), date(2020,1,5), 'HEARTATTACK'),
-    
+
   ],
     ['person_id','category', 'birth_date', 'record_start_date', 'flag']
   )
-    
+
   df_input = spark.createDataFrame([
-    
-    (1,date(2000,1,1), date(2022,10,1)), 
-    (2,date(2020,1,1), None), 
+
+    (1,date(2000,1,1), date(2022,10,1)),
+    (2,date(2020,1,1), None),
     (3,date(1900,1,1), date(2022,8,10)),
     (4,date(2000,7,1), date(2022,8,1)),
     (5,date(1970,1,1), date(2020,1,2)),
@@ -568,47 +566,47 @@ def test_add_30_days_flag():
     (8,date(1970,1,1), None),
     (9,date(1970,1,1), None),
     (10,date(1970,1,1), date(2020,1,6)),
-    
+
   ], ['person_id', 'birth_date', 'date_of_death'])
-  
-  
+
+
 
   df_expected = spark.createDataFrame([
-    
+
     #PERSON 1 DIED AFTER 2 MONTHS AFTER HOSPITALISATION, NO FLAG NEEDED
     (1,date(2000,1,1), date(2022,10,1), None), # no flag needed, died 2 months later
 
     ##PERSON 2 HAS NO HOSPITALISATIONS AND NO DEATHS
     (2,date(2020,1,1), None, None), #nulls in columns, no flag
-    
+
     #PERSON 3 HAS NO HOSPITALISATION FLAG, DIES OF A HEART ATTACK, THEREFORE NO DEATH FLAG NEEDED
-    (3,date(1900,1,1), date(2022,8,10), None), 
-    
+    (3,date(1900,1,1), date(2022,8,10), None),
+
     #NO HOSP FLAG NEEDED AS DEATH WAS TOO LONG AFTER EPISODES
     (4,date(2000,7,1), date(2022,8,1), None),
-    
+
     # JUST 1 HEARTATTACK FLAG
     (5,date(1970,1,1),date(2020,1,2),['HEARTATTACK']),
-    
+
     # JUST 1 HEARTATTACK FLAG AS DUPLICATE DROPPED
     (6,date(1970,1,1),date(2020,1,10),['HEARTATTACK']),
-    
+
     #PERSON 7 HAD A HEARTATTACK AND A STROKE BEFORE DEATH, WITHIN 30 DAYS
     (7,date(1970,1,1),date(2020,1,6), ['HEARTATTACK', 'STROKE']),
-    
+
     #PERSON 8 IS HOSPITALISED WITH NO DEATH
     (8,date(1970,1,1),None,None),
-    
+
     #PERSON 9 HAS A NON EPISODE CATEGORY, NO DEATH
     (9,date(1970,1,1),None,None),
-    
+
     #PERSON 10 HAD A STROKE THEN A HEARTATTACKBEFORE DEATH, WITHIN 30 DAYS, BUT ARRAY SHOULD BE ORDERED SAME AS 7
     (10,date(1970,1,1),date(2020,1,6), ['HEARTATTACK', 'STROKE']),
-    
+
   ], ['person_id', 'birth_date', 'date_of_death', 'died_within_30_days_hospitalisation_flags'])
-  
+
   df_actual = add_30_days_flag(df_input, df_hes_input)
-    
+
   assert compare_results(df_actual, df_expected, join_columns=['person_id', 'birth_date'])
 
 # COMMAND ----------
@@ -634,14 +632,14 @@ def test_assign_htn_risk_groups():
     # HTN Diag = F; Single Valid BP Reading
     ('006',date(2000,1,6),date(2020,1,1),None),
   ],['pid','dob','extract_date','htn_diag_flag'])
-  
+
   df_input_events = spark.createDataFrame([
     # HTN Diag = T; Single Valid BP Reading
     ('001',date(2000,1,1),date(2019,6,1),'120/80','A'),
     # HTN Diag = T; Multiple Valid BP Readings
     ('002',date(2000,1,2),date(2017,6,1),'90/60','A'),
     ('002',date(2000,1,2),date(2019,6,1),'100/70','A'),
-    ('002',date(2000,1,2),date(2019,8,1),'130/90','C'), 
+    ('002',date(2000,1,2),date(2019,8,1),'130/90','C'),
     # HTN Diag = T; Multiple Valid BP Readings; Earlier Extract Date
     ('003',date(2000,1,3),date(2009,1,1),'100/100','F'),
     ('003',date(2000,1,3),date(2011,1,1),'90/90','A'),
@@ -652,7 +650,7 @@ def test_assign_htn_risk_groups():
     # HTN Diag = F; Single Valid BP Reading
     ('006',date(2000,1,6),date(2019,6,1),'60/60','A'),
   ],['pid','dob','record_start_date','code','flag'])
-  
+
   df_expected = spark.createDataFrame([
     # HTN Diag = T; Single Valid BP Reading
     ('001',date(2000,1,1),date(2020,1,1),date(2010,1,1),'A'),
@@ -667,7 +665,7 @@ def test_assign_htn_risk_groups():
     # HTN Diag = F; Single Valid BP Reading
     ('006',date(2000,1,6),date(2020,1,1),None,'-1'),
   ],['pid','dob','extract_date','htn_diag_flag','htn_risk_group'])
-  
+
   df_actual = assign_htn_risk_groups(
     patient_table = df_input_patient,
     events_table = df_input_events,
@@ -680,7 +678,7 @@ def test_assign_htn_risk_groups():
     field_patient_extract_date = 'extract_date',
     field_patient_pid = 'pid',
   )
-  
+
   assert compare_results(df_actual, df_expected, join_columns=['pid', 'dob'])
 
 # COMMAND ----------

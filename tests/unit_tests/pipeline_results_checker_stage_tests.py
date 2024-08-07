@@ -29,14 +29,12 @@ from dsp.validation.validator import compare_results
 
 suite = FunctionTestSuite()
 
-## The following are fake people and data created for test purposes
-
 # COMMAND ----------
 
 # Create test specific parameters
 @dataclass(frozen = True)
 class TestParams(ParamsBase):
-    DATABASE_NAME = 'prevent_tool_collab'
+    DATABASE_NAME = params.DATABASE_NAME
     ## SHARED
     PID_FIELD = 'person_id'
     PRACTICE_FIELD = 'practice_identifier'
@@ -82,7 +80,7 @@ def test_default_create_report_table_stage():
   test_params = TestParams()
   # Fake log
   log = PipelineLogger('')
-  
+
   ## Events table
   events_schema = StructType([
     StructField("person_id",StringType(),False),
@@ -99,7 +97,7 @@ def test_default_create_report_table_stage():
     ('2', 'cvdp_cohort', 'abc', '2', 789, date(2021, 1, 1)),
     ('3', 'cvdp_htn', 'abc', '3', 112, date(2021, 1, 1)),
   ], events_schema)
-  
+
   ## Patients table
   patients_schema = StructType([
       StructField("person_id",StringType(),False),
@@ -126,13 +124,13 @@ def test_default_create_report_table_stage():
     ('pass', 'check_patients_table_non_nullable_columns_for_nulls'),
     ('pass', 'check_patients_table_schema_equality')
   ], ['level', 'check'])
-  
+
   # Main test function
   with FunctionPatch('params', test_params):
     # Stage initialisation
     stage = DefaultCreateReportTableStage(
-      events_table_input='EVENTS_TABLE', 
-      patient_table_input='PATIENTS_TABLE', 
+      events_table_input='EVENTS_TABLE',
+      patient_table_input='PATIENTS_TABLE',
       report_table_output='REPORT_TABLE'
     )
     context = PipelineContext('12345', params, [DefaultCreateReportTableStage])
@@ -159,7 +157,7 @@ def test_default_create_report_table_stage_fails():
   test_params = TestParams()
   # Fake log
   log = PipelineLogger('')
-  
+
   ## Events table
   events_schema = StructType([
     StructField("person_id",StringType(),True),
@@ -169,7 +167,7 @@ def test_default_create_report_table_stage_fails():
     StructField("record_id",IntegerType(),True),
     StructField("record_start_date",DateType(),True)
     ])
-  
+
   # check for one column containing all nulls, non nullable columns containing null values, surprise dataset, missing dataset & schema not matching
   df_events = spark.createDataFrame([
     ('0', 'dars_bird_deaths', None, '0', 123, date(2021, 1, 1)),
@@ -181,7 +179,7 @@ def test_default_create_report_table_stage_fails():
     ('6', 'cvdp_cohort', None, '2', 789, None),
     ('7', 'cvdp_cohort', None, '3', None, date(2021, 1, 1))
   ], events_schema)
-  
+
   ## Patients table
   patients_schema = StructType([
       StructField("person_id",StringType(),True),
@@ -217,8 +215,8 @@ def test_default_create_report_table_stage_fails():
   with FunctionPatch('params', test_params):
     # Stage initialisation
     stage = DefaultCreateReportTableStage(
-      events_table_input='EVENTS_TABLE', 
-      patient_table_input='PATIENTS_TABLE', 
+      events_table_input='EVENTS_TABLE',
+      patient_table_input='PATIENTS_TABLE',
       report_table_output='REPORT_TABLE'
     )
     context = PipelineContext('12345', params, [DefaultCreateReportTableStage])
@@ -244,13 +242,13 @@ def test_default_check_results_stage():
   test_params = TestParams()
   # Fake log
   log = PipelineLogger('')
-  
+
   df_input = spark.createDataFrame([
     ('pass', 'check_1', 'message_1'),
     ('pass', 'check_2', 'message_2'),
     ('info', 'check_3', 'info_3'),
   ], ['level', 'check', 'message'])
-  
+
   # Main test function
   with FunctionPatch('params', test_params):
     # Stage initialisation
@@ -258,7 +256,7 @@ def test_default_check_results_stage():
     context = PipelineContext('12345', params, [DefaultCheckResultsStage])
     context['REPORT_TABLE'] = PipelineAsset('REPORT_TABLE', context, df_input)
     stage._run(context, log)
-     
+
   assert True
 
 # COMMAND ----------
@@ -271,7 +269,7 @@ def test_default_check_results_stage_fails():
   test_params = TestParams()
   # Fake log
   log = PipelineLogger('')
-  
+
   df_input = spark.createDataFrame([
     ('pass', 'check_1', 'message_1'),
     ('pass', 'check_2', 'message_1'),

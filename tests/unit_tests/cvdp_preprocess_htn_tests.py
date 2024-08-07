@@ -27,8 +27,6 @@ import pyspark.sql.types as T
 
 suite = FunctionTestSuite()
 
-## The following are fake people and data created for test purposes
-
 # COMMAND ----------
 
 @suite.add_test
@@ -38,7 +36,7 @@ def test_split_and_process_htn_entries_single():
     Test takes a cvdp journal-style dataframe and returns only those that match the single-bp-reading criteria
     of seperate systolic and diastolic readings in differing records.
     '''
-    
+
     # BP SNOMED CODES
     codes_snomed_test_systolic = ['S1']
     codes_snomed_test_diastolic = ['D1']
@@ -101,7 +99,7 @@ def test_split_and_process_htn_entries_multi():
     Test takes a cvdp journal-style dataframe and returns only those that match the multi-bp-reading criteria
     of joint systolic and diastolic readings in single records.
     '''
-    
+
     # BP CLUSTER CODES
     codes_cluster_test = ['bp']
 
@@ -163,21 +161,21 @@ def test_union_bp_frames():
     preprocess_cvdp_htn::union_bp_frames()
     Testing the union of two dataframes with identical columns
     '''
-    
+
     df_input_1 = spark.createDataFrame([
         (0,'A','1'),
     ], ['idx','key','value'])
-    
+
     df_input_2 = spark.createDataFrame([
         (1,'B','2'),
     ], ['idx','key','value'])
-    
-    
+
+
     df_expected = spark.createDataFrame([
         (0,'A','1'),
         (1,'B','2'),
     ], ['idx','key','value'])
-    
+
     df_actual = union_bp_frames(
         df_single = df_input_1,
         df_multi = df_input_2
@@ -195,7 +193,7 @@ def test_filter_bp_frames():
     Test takes a dataframe of test single and multiple blood pressure readings, filters to remove any records that
     contain invalid ages (below minimum, above maximum) and invalid diastolic or systolic BP readings (below minimum)
     '''
-    
+
     # Test variables
     test_min_age = 5
     test_max_age = 50
@@ -238,8 +236,8 @@ def test_filter_bp_frames():
 
     df_expected = spark.createDataFrame([
         (0,'001',date(2000,1,1),date(2020,1,1),100,80,20),
-        (6,'008',date(2000,1,1),date(2020,1,1),None,80,20), 
-        (7,'009',date(2000,1,1),date(2020,1,1),100,None,20), 
+        (6,'008',date(2000,1,1),date(2020,1,1),None,80,20),
+        (7,'009',date(2000,1,1),date(2020,1,1),100,None,20),
     ],schema_expected)
 
     df_actual = filter_bp_frames(
@@ -256,7 +254,7 @@ def test_filter_bp_frames():
     )
 
     assert compare_results(df_actual, df_expected, join_columns = ['idx'])
-    
+
 
 # COMMAND ----------
 
@@ -267,7 +265,7 @@ def test_calculate_min_bp_readings():
     Test takes the processed blood pressure measurement dataset (extracted, valid values) and calculates
     the minimum systolic and minimum diastolic for each journal date, for each extract date.
     '''
-    
+
     df_input = spark.createDataFrame([
         # Single SYS and DIA
         ('N1','001',None,date(2000,1,1),date(2010,1,1),date(2022,1,1)),
@@ -315,8 +313,8 @@ def test_calculate_min_bp_readings():
         ('N7','001',None,date(2000,1,1),date(2010,1,1),date(2022,1,1)),
         ('N7','001',None,date(2000,1,1),date(2010,1,1),date(2022,1,1)),
     ], ['pid','sys','dia','dob','journal','extract'])
-    
-    
+
+
     df_expected = spark.createDataFrame([
         ('N1','001','002',date(2000,1,1),date(2010,1,1),date(2022,1,1)),
         ('N2','001','002',date(2000,1,1),date(2010,1,1),date(2022,1,1)),
@@ -329,7 +327,7 @@ def test_calculate_min_bp_readings():
         ('N5','001','002',date(2000,1,1),date(2010,1,1),date(2022,1,1)),
         ('N6','001','002',date(2000,1,1),date(2010,1,1),date(2022,1,1)),
     ], ['pid','sys','dia','dob','journal','extract'])
-    
+
     df_actual = calculate_min_bp_readings(
         df = df_input,
         field_person_id = 'pid',
@@ -352,7 +350,7 @@ def test_keep_latest_journal_updates():
     Test takes the processed and minimised blood pressure measurements and keeps the BP record with the latest extract
     date, where multiple minimums are present on the same journal date entry.
     '''
-    
+
     df_input = spark.createDataFrame([
         ('N1','BP','001','002',date(2000,1,1),date(2010,1,1),date(2022,1,1)), # (KEEP) Single Record
         ('N2','BP','001','002',date(2000,1,2),date(2010,1,1),date(2023,1,1)), # (KEEP) Latest Record
@@ -361,24 +359,23 @@ def test_keep_latest_journal_updates():
         ('N3','BP','011','012',date(2000,1,3),date(2010,1,1),date(2022,1,1)), # (DROP) Earlier Record
         ('N3','BP','021','022',date(2000,1,3),date(2010,1,1),date(2021,1,1)), # (DROP) Earlier Record
     ], ['pid','code','sys','dia','dob','journal','extract'])
-    
-    
+
+
     df_expected = spark.createDataFrame([
         ('N1','BP','001','002',date(2000,1,1),date(2010,1,1),date(2022,1,1)),
         ('N2','BP','001','002',date(2000,1,2),date(2010,1,1),date(2023,1,1)),
         ('N3','BP','001','002',date(2000,1,3),date(2010,1,1),date(2023,1,1)),
     ], ['pid','code','sys','dia','dob','journal','extract'])
-    
+
     df_actual = keep_latest_journal_updates(
         df = df_input,
         field_person_id = 'pid',
         field_person_dob = 'dob',
         field_date_extract = 'extract',
-        field_date_journal = 'journal',
+        field_date_journal = 'journal'
     )
 
     assert compare_results(df_actual, df_expected, join_columns = ['pid','dob'])
-
 
 # COMMAND ----------
 
@@ -389,7 +386,7 @@ def test_classify_htn_risk():
     Test takes the processed blood pressure dataframe (extracted, minimised and deduplicated) and classifies each blood pressure
     measurement with a corresponding hypertension risk group.
     '''
-    
+
     # Test variables
     test_htn_risk_group_col = 'htn_risk_group'
     test_age_col = 'age'
@@ -484,29 +481,158 @@ def test_format_processed_htn_output():
     Test takes the classified bp measurement dataframe and returns a formatted (selected columns) and filtered (based on a starting
     date from which to keep bp records) dataframe.
     '''
-    
+
     df_input = spark.createDataFrame([
         ('N1','BP','001','002',date(2000,1,1),date(2010,1,1),date(2022,1,1)),
         ('N2','BP','001','002',date(2000,1,2),date(2010,1,1),date(2023,1,1)),
         ('N2','BP','001','002',date(2000,1,2),date(2009,1,1),date(2023,1,1)),
         ('N3','BP','001','002',date(2000,1,3),date(2009,1,1),date(2023,1,1)),
     ], ['pid','code','sys','dia','dob','journal','extract'])
-    
-    
+
+
     df_expected = spark.createDataFrame([
-        ('N1','001','002',date(2000,1,1),date(2010,1,1),date(2022,1,1)),
-        ('N2','001','002',date(2000,1,2),date(2010,1,1),date(2023,1,1)),
-    ], ['pid','sys','dia','dob','journal','extract'])
-    
+        ('N1','001','002',date(2000,1,1),date(2010,1,1),date(2022,1,1),'ea271c4ee1cef55ed31a3ff4a2a17578dab518e28fc8380fa6eb36728949137b'),
+        ('N2','001','002',date(2000,1,2),date(2010,1,1),date(2023,1,1),'4ec8190b497e9003d1d75792de5efd2fa210ea34c4c75e5a1072917fb699e70c'),
+    ], ['pid','sys','dia','dob','journal','extract','htn_pk'])
+
     df_actual = format_processed_htn_output(
         df = df_input,
         fields_select = ['pid','dob','sys','dia','journal','extract'],
         field_bp_date = 'journal',
-        filter_start_date = date(2010,1,1)
+        filter_start_date = date(2010,1,1),
+        col_primary_key = 'htn_pk',
+        fields_hashable = ['pid','dob','journal']
     )
 
-    assert compare_results(df_actual, df_expected, join_columns = ['pid','dob'])
+    assert compare_results(df_actual, df_expected, join_columns = ['htn_pk'])
 
+# COMMAND ----------
+
+@suite.add_test
+def test_preprocess_cvdp_htn_updated_records_hash():
+  '''
+  preprocess_cvdp_htn::preprocess_cvdp_htn()
+  Test takes two extracts (representing when the CVDP audit data is updated) and runs the processing function to produce the 
+  final CVDP hypertension records. These records should have matching record identifiers as they are from the same journal
+  entry, over different extract updates (representing an updated extract).
+  '''
+
+  # Test SNOMED and Cluster Codes
+  codes_cluster_test = ['bp']
+  codes_snomed_test_systolic = ['S1']
+  codes_snomed_test_diastolic = ['D1']
+
+  ## Test Schemas
+  # Input
+  schema_input = T.StructType([
+      T.StructField('pid',T.StringType(),True),
+      T.StructField('dob',T.DateType(),True),
+      T.StructField('journal_date',T.DateType(),True),
+      T.StructField('extract_date',T.DateType(),True),
+      T.StructField('code', T.StringType(), True),
+      T.StructField('value',T.ArrayType(
+          T.StringType(), True
+      ))
+  ])
+  # Expected
+  schema_expected = T.StructType([
+      T.StructField('pid',T.StringType(),False),
+      T.StructField('dob',T.DateType(),False),
+      T.StructField('age',T.LongType(),False),
+      T.StructField('extract_date',T.DateType(),False),
+      T.StructField('bp_sys',T.StringType(),False),
+      T.StructField('bp_dia',T.StringType(),False),
+      T.StructField('htn_risk_group',T.StringType(),False),
+      T.StructField('journal_date',T.DateType(),False),
+      T.StructField('htn_pk',T.StringType(),False)
+  ])
+
+  ## Input Test Data
+  # First Extract
+  df_input_01 = spark.createDataFrame([
+    ('001', date(2000,1,1), date(2010,1,1), date(2020,1,1), 'S1', ['60', None]),
+    ('001', date(2000,1,1), date(2010,1,1), date(2020,1,1), 'D1', ['120', None]),
+  ], schema_input)
+  # Second Extract
+  df_input_02 = spark.createDataFrame([
+    ('001', date(2000,1,1), date(2010,1,1), date(2020,1,1), 'S1', ['60', None]),
+    ('001', date(2000,1,1), date(2010,1,1), date(2020,1,1), 'D1', ['120', None]),
+    ('001', date(2000,1,1), date(2010,1,1), date(2021,1,1), 'bp', ['60', '170']),
+    ('001', date(2000,1,1), date(2010,1,1), date(2021,1,1), 'S1', ['80', None]),
+  ], schema_input)
+
+  ## Expected Test Data
+  # First Extract
+  df_expected_01 = spark.createDataFrame([
+    ('001',date(2000,1,1),10,date(2020,1,1),'60','120','1c',date(2010,1,1),'897a16e019618de4432d19c73f31020690351c82be2b53ce0d5fdd0b6f0672c2'),
+  ], schema_expected)
+  # Second Extract
+  df_expected_02 = spark.createDataFrame([
+    ('001',date(2000,1,1),10,date(2021,1,1),'60','170','1d',date(2010,1,1),'897a16e019618de4432d19c73f31020690351c82be2b53ce0d5fdd0b6f0672c2'),
+  ], schema_expected)
+
+  ## Actual Data
+  # First Extract
+  df_actual_01 = preprocess_cvdp_htn(
+    df = df_input_01,
+    age_min_value = 0,
+    age_max_value = 120,
+    bp_min_diastolic = 0,
+    bp_min_systolic = 0,
+    codes_bp_clusters = codes_cluster_test,
+    codes_bp_diastolic = codes_snomed_test_diastolic,
+    codes_bp_systolic = codes_snomed_test_systolic,
+    col_age_at_event = 'age',
+    col_diastolic = 'bp_dia',
+    col_risk_group = 'htn_risk_group',
+    col_systolic = 'bp_sys',
+    field_calculation_date = 'journal_date',
+    field_cluster_id = 'code',
+    field_values_array = 'value',
+    field_date_extract = 'extract_date',
+    field_date_journal = 'journal_date',
+    field_person_dob = 'dob',
+    field_person_id = 'pid',
+    field_snomed_code = 'code',
+    field_bp_date = 'journal_date',
+    filter_start_date = date(2000,1,1),
+    fields_final_output = ['pid','dob','age','extract_date','bp_sys','bp_dia','htn_risk_group','journal_date'],
+    col_primary_key = 'htn_pk',
+    fields_hashable = ['pid','dob','journal_date']
+  )
+  # Second Extract
+  df_actual_02 = preprocess_cvdp_htn(
+    df = df_input_02,
+    age_min_value = 0,
+    age_max_value = 120,
+    bp_min_diastolic = 0,
+    bp_min_systolic = 0,
+    codes_bp_clusters = codes_cluster_test,
+    codes_bp_diastolic = codes_snomed_test_diastolic,
+    codes_bp_systolic = codes_snomed_test_systolic,
+    col_age_at_event = 'age',
+    col_diastolic = 'bp_dia',
+    col_risk_group = 'htn_risk_group',
+    col_systolic = 'bp_sys',
+    field_calculation_date = 'journal_date',
+    field_cluster_id = 'code',
+    field_values_array = 'value',
+    field_date_extract = 'extract_date',
+    field_date_journal = 'journal_date',
+    field_person_dob = 'dob',
+    field_person_id = 'pid',
+    field_snomed_code = 'code',
+    field_bp_date = 'journal_date',
+    filter_start_date = date(2000,1,1),
+    fields_final_output = ['pid','dob','age','extract_date','bp_sys','bp_dia','htn_risk_group','journal_date'],
+    col_primary_key = 'htn_pk',
+    fields_hashable = ['pid','dob','journal_date']
+  )
+
+  ## Assertion Tests
+  # First Extract
+  assert compare_results(df_actual_01, df_expected_01, join_columns = ['htn_pk'])
+  assert compare_results(df_actual_02, df_expected_02, join_columns = ['htn_pk'])
 
 # COMMAND ----------
 

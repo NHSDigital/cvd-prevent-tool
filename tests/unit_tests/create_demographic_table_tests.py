@@ -23,15 +23,13 @@ from dsp.validation.validator import compare_results
 
 suite = FunctionTestSuite()
 
-## The following are fake people and data created for test purposes
-
 # COMMAND ----------
 
 @suite.add_test
 def test_load_apc_from_events():
     '''test_load_data_assets
     '''
-    
+
     # TEST PARAMETERS
     @dataclass(frozen = True)
     class TestParams(ParamsBase):
@@ -49,7 +47,7 @@ def test_load_apc_from_events():
         EVENTS_CVDP_COHORT_DATASET  = 'test_cvdp'
         EVENTS_CVDP_COHORT_CATEGORY = 'test_category_cvdp'
         HES_APC_TABLE               = 'test_apc'
-        EVENTS_HES_EPISODE_CATEGORY = 'test_category_hes'
+        EVENTS_HES_APC_EPISODE_CATEGORY = 'test_category_hes'
         DEMOGRAPHIC_OUTPUT_FIELDS   = [
           'person_id', 'birth_date', 'dataset', 'record_date','ethnicity'
         ]
@@ -115,11 +113,11 @@ def test_load_apc_from_events():
     # DATA AND STAGE SETUP
     input_tmp_table_name = f'_temp_{uuid4().hex}'
     df_events_input.createOrReplaceGlobalTempView(input_tmp_table_name)
-       
-    
+
+
     with FunctionPatch('params',test_params):
         # STAGE INITIALISATION
-        stage = CreateDemographicTableStage(events_table_input = 'events', cvdp_cohort_journal_input = 'journal', 
+        stage = CreateDemographicTableStage(events_table_input = 'events', cvdp_cohort_journal_input = 'journal',
                                             hes_op_input = 'hes_op', hes_ae_input = 'hes_ae',demographic_table_output = None
                                            )
 
@@ -136,15 +134,97 @@ def test_load_apc_from_events():
 # COMMAND ----------
 
 @suite.add_test
+def test_filter_hes_ae():
+    '''test_filter_hes_ae
+
+    Test of sub-method _restrict_hes_ae_year.
+    '''
+    # TEST PARAMETERS
+    @dataclass(frozen = True)
+    class TestParams(ParamsBase):
+        DATABASE_NAME               = None
+        HES_APC_TABLE                   = 'test_apc'
+        EVENTS_HES_APC_EPISODE_CATEGORY = 'test_category_hes'
+        HES_5YR_START_YEAR              = 2020
+        RECORD_STARTDATE_FIELD          = 'test_start_date'
+
+    test_params = TestParams()
+
+     # INPUT DATA - HES AE TEST SCHEMA
+    hes_schema = T.StructType([
+        T.StructField('person_id', T.IntegerType(), False),
+        T.StructField('birth_date', T.DateType(), False),
+        T.StructField('dataset', T.StringType(), False),
+        T.StructField('test_start_date', T.DateType(), True),
+        T.StructField('ethnicity', T.StringType(), True),
+    ])
+
+    # INPUT DATA - HES AE TEST DATAFRAME
+    df_hes_ae_input = spark.createDataFrame([
+    (0, date(1960,1,1), 'hes_ae', date(2020,1,1), 'B'), # AFTER START YEAR
+    (1, date(1960,1,1), 'hes_ae', date(2019,12,31), 'B'), # BEFORE START YEAR
+    (1, date(1960,1,1), 'hes_ae', date(2020,1,2), 'B'), # AFTER START YEAR
+    (2, date(1960,1,1), 'hes_ae', date(2011,1,1), None), # BEFORE START YEAR
+    (2, date(1960,1,1), 'hes_ae', date(2021,1,1), 'A'), # AFTER START YEAR
+    (3, date(1960,1,1), 'hes_ae', date(2010,1,1), 'A'), # BEFORE START YEAR
+    (3, date(1960,1,1), 'hes_ae', date(2021,1,1), None), # AFTER START YEAR
+    (4, date(1960,1,1), 'hes_ae', None, 'A'), # NULL START
+      ], hes_schema)
+
+    # EMPTY SCHEMA FOR BLANK TABLES
+    empty_schema = T.StructType([
+        T.StructField('idx', T.IntegerType(), False),
+    ])
+
+    # BLANK TABLES - NOT USED IN THIS FUNCTION
+    df_journal = spark.createDataFrame([], empty_schema)
+    df_hes_op = spark.createDataFrame([], empty_schema)
+    df_events = spark.createDataFrame([
+        ('001',date(2000,1,1),'test_apc','test_category_hes')
+    ], ['person_id','birth_date','dataset','category'])
+
+    # EXPECTED DATA - BASE TABLE TEST DATAFRAME
+    df_expected_hes_ae = spark.createDataFrame([
+    (0, date(1960,1,1), 'hes_ae', date(2020,1,1), 'B'), # AFTER START YEAR
+    (1, date(1960,1,1), 'hes_ae', date(2020,1,2), 'B'), # AFTER START YEAR
+    (2, date(1960,1,1), 'hes_ae', date(2021,1,1), 'A'), # AFTER START YEAR
+    (3, date(1960,1,1), 'hes_ae', date(2021,1,1), None), # AFTER START YEAR
+    ], hes_schema)
+
+    # DATA AND STAGE SETUP
+    input_tmp_table_name = f'_temp_{uuid4().hex}'
+    df_hes_ae_input.createOrReplaceGlobalTempView(input_tmp_table_name)
+
+
+    with FunctionPatch('params',test_params):
+        # STAGE INITIALISATION
+        stage = CreateDemographicTableStage(events_table_input = 'events', cvdp_cohort_journal_input = 'journal',
+                                            hes_op_input = 'hes_op', hes_ae_input = 'hes_ae',demographic_table_output = None
+                                           )
+
+        context = PipelineContext('12345', params, [CreateDemographicTableStage])
+        context['events'] = PipelineAsset('events', context, df_events)
+        context['journal'] = PipelineAsset('journal', context, df_journal)
+        context['hes_ae'] = PipelineAsset('hes_ae', context, df_hes_ae_input)
+        context['hes_op'] = PipelineAsset('hes_op', context, df_hes_op)
+        stage._load_data_assets(context)
+        stage._restrict_hes_ae_year()
+        df_actual_hes_ae = stage._data_holder['hes_ae']
+
+    assert compare_results(df_actual_hes_ae, df_expected_hes_ae, join_columns=['person_id','birth_date'])
+
+# COMMAND ----------
+
+@suite.add_test
 def test_create_base_table_cvdp():
     '''test_create_base_table
-    
+
     Test of sub-method _create_base_table in the CreateDemographicTableStage class. The extended functionality of
     extract_patient_events is captured in create_patient_table_lib_tests::test_extract_patient_events.add().
-    Test returns a single-row-per-patient, pulling cohort events (ONLY) from the events table. 
+    Test returns a single-row-per-patient, pulling cohort events (ONLY) from the events table.
     This output is stored as 'demographic_data' in the data_holder object.
     '''
-    
+
     # TEST PARAMETERS
     @dataclass(frozen = True)
     class TestParams(ParamsBase):
@@ -162,9 +242,9 @@ def test_create_base_table_cvdp():
         EVENTS_CVDP_COHORT_DATASET  = 'test_cvdp'
         EVENTS_CVDP_COHORT_CATEGORY = 'test_category_cvdp'
         HES_APC_TABLE               = 'test_apc'
-        EVENTS_HES_EPISODE_CATEGORY = 'test_category_hes'
+        EVENTS_HES_APC_EPISODE_CATEGORY = 'test_category_hes'
         DEMOGRAPHIC_OUTPUT_FIELDS   = [
-          'person_id', 'birth_date', 'dataset', 'record_date','ethnicity'
+            'person_id', 'birth_date', 'dataset', 'record_date','ethnicity'
         ]
 
     test_params = TestParams()
@@ -221,11 +301,11 @@ def test_create_base_table_cvdp():
     # DATA AND STAGE SETUP
     input_tmp_table_name = f'_temp_{uuid4().hex}'
     df_events_input.createOrReplaceGlobalTempView(input_tmp_table_name)
-       
-    
+
+
     with FunctionPatch('params',test_params):
         # STAGE INITIALISATION
-        stage = CreateDemographicTableStage(events_table_input = 'events', cvdp_cohort_journal_input = 'journal', 
+        stage = CreateDemographicTableStage(events_table_input = 'events', cvdp_cohort_journal_input = 'journal',
                                             hes_op_input = 'hes_op', hes_ae_input = 'hes_ae',demographic_table_output = None
                                            )
 
@@ -245,12 +325,12 @@ def test_create_base_table_cvdp():
 @suite.add_test
 def test_find_known_ethnicity():
     '''test_find_known_ethnicity
-    
+
     Test of sub-method _create_base_table in the CreateDemographicTableStage class. The extended functionality of
     extract_patient_events is captured in create_patient_table_lib_tests::test_extract_patient_events.add().
-    Test returns a single-row-per-patient, pulling cohort events (ONLY) from the events table. 
+    Test returns a single-row-per-patient, pulling cohort events (ONLY) from the events table.
     '''
-    
+
     # TEST PARAMETERS
     @dataclass(frozen = True)
     class TestParams(ParamsBase):
@@ -269,9 +349,9 @@ def test_find_known_ethnicity():
         EVENTS_CVDP_COHORT_CATEGORY = 'test_category_cvdp'
         ETHNICITY_UNKNOWN_CODES     = ['z','Z','',None]
         HES_APC_TABLE               = 'test_apc'
-        EVENTS_HES_EPISODE_CATEGORY = 'test_category_hes'
+        EVENTS_HES_APC_EPISODE_CATEGORY = 'test_category_hes'
         DEMOGRAPHIC_OUTPUT_FIELDS   = [
-          'person_id', 'birth_date', 'dataset', 'record_date','ethnicity'
+            'person_id', 'birth_date', 'dataset', 'record_date','ethnicity'
         ]
 
     test_params = TestParams()
@@ -332,11 +412,11 @@ def test_find_known_ethnicity():
     # DATA AND STAGE SETUP
     input_tmp_table_name = f'_temp_{uuid4().hex}'
     df_input.createOrReplaceGlobalTempView(input_tmp_table_name)
-       
-    
+
+
     with FunctionPatch('params',test_params):
         # STAGE INITIALISATION
-        stage = CreateDemographicTableStage(events_table_input = 'events', cvdp_cohort_journal_input = 'journal', 
+        stage = CreateDemographicTableStage(events_table_input = 'events', cvdp_cohort_journal_input = 'journal',
                                             hes_op_input = 'hes_op', hes_ae_input = 'hes_ae',demographic_table_output = None
                                            )
 
@@ -357,12 +437,12 @@ def test_find_known_ethnicity():
 @suite.add_test
 def test_find_unknown_ethnicity():
     '''test_find_known_ethnicity
-    
+
     Test of sub-method _create_base_table in the CreateDemographicTableStage class. The extended functionality of
     extract_patient_events is captured in create_patient_table_lib_tests::test_extract_patient_events.add().
-    Test returns a single-row-per-patient, pulling cohort events (ONLY) from the events table. 
+    Test returns a single-row-per-patient, pulling cohort events (ONLY) from the events table.
     '''
-    
+
     # TEST PARAMETERS
     @dataclass(frozen = True)
     class TestParams(ParamsBase):
@@ -381,9 +461,9 @@ def test_find_unknown_ethnicity():
         EVENTS_CVDP_COHORT_CATEGORY = 'test_category_cvdp'
         ETHNICITY_UNKNOWN_CODES     = ['z','Z','',None]
         HES_APC_TABLE               = 'test_apc'
-        EVENTS_HES_EPISODE_CATEGORY = 'test_category_hes'
+        EVENTS_HES_APC_EPISODE_CATEGORY = 'test_category_hes'
         DEMOGRAPHIC_OUTPUT_FIELDS   = [
-          'person_id', 'birth_date', 'dataset', 'record_date','ethnicity'
+            'person_id', 'birth_date', 'dataset', 'record_date','ethnicity'
         ]
 
     test_params = TestParams()
@@ -439,11 +519,11 @@ def test_find_unknown_ethnicity():
     # DATA AND STAGE SETUP
     input_tmp_table_name = f'_temp_{uuid4().hex}'
     df_input.createOrReplaceGlobalTempView(input_tmp_table_name)
-       
-    
+
+
     with FunctionPatch('params',test_params):
         # STAGE INITIALISATION
-        stage = CreateDemographicTableStage(events_table_input = 'events', cvdp_cohort_journal_input = 'journal', 
+        stage = CreateDemographicTableStage(events_table_input = 'events', cvdp_cohort_journal_input = 'journal',
                                             hes_op_input = 'hes_op', hes_ae_input = 'hes_ae',demographic_table_output = None
                                            )
 
@@ -481,9 +561,9 @@ def test_enhance_ethnicity():
         EVENTS_CVDP_COHORT_CATEGORY = 'test_category_cvdp'
         ETHNICITY_UNKNOWN_CODES     = ['z','Z','',None]
         HES_APC_TABLE               = 'test_apc'
-        EVENTS_HES_EPISODE_CATEGORY = 'test_category_hes'
+        EVENTS_HES_APC_EPISODE_CATEGORY = 'test_category_hes'
         DEMOGRAPHIC_OUTPUT_FIELDS   = [
-          'person_id', 'birth_date', 'dataset', 'record_start_date','ethnicity'
+            'person_id', 'birth_date', 'dataset', 'record_start_date','ethnicity'
         ]
         JOURNAL_DATE_FIELD          = 'journal_date'
         REF_CODE_FIELD              = 'ConceptId'
@@ -491,7 +571,7 @@ def test_enhance_ethnicity():
         GLOBAL_JOIN_KEY             = ['person_id','birth_date']
 
     test_params = TestParams()
-    
+
     expected_schema = T.StructType([
         T.StructField('person_id', T.IntegerType(), False),
         T.StructField('birth_date', T.DateType(), False),
@@ -504,7 +584,7 @@ def test_enhance_ethnicity():
         T.StructField('person_id', T.IntegerType(), False),
         T.StructField('birth_date', T.DateType(), False)
     ])
-    
+
     df_ids = spark.createDataFrame([
         (0,date(1960,1,1)),
         (1,date(1960,1,1)),
@@ -514,7 +594,7 @@ def test_enhance_ethnicity():
         (9,date(1960,1,1)),
         (10,date(1960,1,1)),
     ], id_schema)
-    
+
     journal_schema = T.StructType([
         T.StructField('person_id', T.IntegerType(), False),
         T.StructField('birth_date', T.DateType(), False),
@@ -522,7 +602,7 @@ def test_enhance_ethnicity():
         T.StructField('code', T.StringType(), True),
         T.StructField('CLUSTER_ID', T.StringType(), True)
     ])
-    
+
     hes_schema = T.StructType([
         T.StructField('person_id', T.IntegerType(), False),
         T.StructField('birth_date', T.DateType(), False),
@@ -545,8 +625,8 @@ def test_enhance_ethnicity():
     (7, date(1960,1,1), date(2019,1,1), '92571000000102', 'DUPE_TEST_CLUSTER'), # NOT PRIORITY (MORE RECENT RECORD IN OTHER SOURCE) -> A (DUPE)
     (8, date(1960,1,1), date(2019,1,1), '92561000000109', 'TEST_CLUSTER'), # NOT PRIORITY (MORE RECENT RECORD IN OTHER SOURCE) -> C
     (8, date(1960,1,1), date(2019,1,1), '92561000000109', 'DUPE_TEST_CLUSTER'), # NOT PRIORITY (MORE RECENT RECORD IN OTHER SOURCE) -> C
-      ], journal_schema)
-      
+    ], journal_schema)
+    
     df_hes_ae = spark.createDataFrame([
     (0, date(1960,1,1), 'hes_ae', date(2022,1,1), 'B', 'BAR_1'), # NOT PRIORITY (RECORD ON SAME DATE FROM HIGHER PRIORITY SOURCE)
     (4, date(1960,1,1), 'hes_ae', date(2022,1,1), 'B', 'BAR_1'), # PRIORITY (RECORD ON SAME DATE FROM LOWER PRIORITY SOURCE)
@@ -554,7 +634,7 @@ def test_enhance_ethnicity():
     (8, date(1960,1,1), 'hes_ae', date(2022,1,1), None, 'BAR_2'), #INVALID ETHNICITY CODE
     (9, date(1960,1,1), 'hes_ae', date(2021,1,1), 'A', 'BAR_2'), # NOT PRIORITY (MORE RECENT RECORD IN OTHER SOURCE)
       ], hes_schema)
-      
+
     df_hes_op = spark.createDataFrame([
     (0, date(1960,1,1), 'hes_op', date(2022,1,1), 'C', 'BAR_1'), # NOT PRIORITY (RECORD ON SAME DATE FROM HIGHER PRIORITY SOURCE)
     (1, date(1960,1,1), 'hes_op', date(2021,1,1), '', 'BAR_2'), #INVALID ETHNICITY CODE
@@ -570,7 +650,7 @@ def test_enhance_ethnicity():
     (8, date(1960,1,1), 'hes_op', date(2022,1,1), 'B', 'BAR_2'), # INVALID (MULTIPLE ETHNICITIES ON SAME DATE FROM SAME SOURCE) -> NOT IN IDS
     (9, date(1960,1,1), 'hes_op', date(2022,1,1), 'A', 'BAR_2'), # NOT PRIORITY (RECORD ON SAME DATE FROM HIGHER PRIORITY SOURCE)
       ], hes_schema)
-      
+
     df_hes_apc = spark.createDataFrame([
     (0, date(1960,1,1), 'hes_apc', date(2022,1,1), 'C', 'BAR_1'), # NOT PRIORITY (RECORD ON SAME DATE FROM HIGHER PRIORITY SOURCE)
     (1, date(1960,1,1), 'hes_apc', date(2021,1,1), 'B', 'BAR_1'), # NOT PRIORITY (MORE RECENT RECORD IN OTHER SOURCE)
@@ -579,7 +659,7 @@ def test_enhance_ethnicity():
     (4, date(1960,1,1), 'hes_apc', date(2022,1,1), None, 'BAR_2'), #INVALID ETHNICITY CODE,
     (9, date(1960,1,1), 'hes_apc', date(2022,1,1), 'A', 'BAR_2'), # MOST RECENT PRIORITY
       ], hes_schema)
-  
+
     # EXPECTED DATA - ENHANCED ETHNICITY TABLE TEST DATAFRAME
     df_expected_enhanced = spark.createDataFrame([
         (0, date(1960,1,1), 'journal', date(2022,1,1), 'A'),
@@ -590,10 +670,10 @@ def test_enhance_ethnicity():
         (9, date(1960,1,1), 'hes_apc', date(2022,1,1), 'A'),
         (10, date(1960,1,1), None, None, None),
     ], expected_schema)
-    
+
     with FunctionPatch('params',test_params):
         # STAGE INITIALISATION
-        stage = CreateDemographicTableStage(events_table_input = 'events', cvdp_cohort_journal_input = 'journal', 
+        stage = CreateDemographicTableStage(events_table_input = 'events', cvdp_cohort_journal_input = 'journal',
                                             hes_op_input = 'hes_op', hes_ae_input = 'hes_ae',demographic_table_output = None
                                            )
 
@@ -630,7 +710,7 @@ def test_consolidate_ethnicites():
         EVENTS_CVDP_COHORT_CATEGORY = 'test_category_cvdp'
         ETHNICITY_UNKNOWN_CODES     = ['z','Z','',None]
         HES_APC_TABLE               = 'test_apc'
-        EVENTS_HES_EPISODE_CATEGORY = 'test_category_hes'
+        EVENTS_HES_APC_EPISODE_CATEGORY = 'test_category_hes'
         DEMOGRAPHIC_OUTPUT_FIELDS   = [
           'person_id', 'birth_date', 'dataset', 'record_start_date','ethnicity'
         ]
@@ -639,7 +719,7 @@ def test_consolidate_ethnicites():
         REF_ETHNICITY_CODE_FIELD    = 'PrimaryCode'
 
     test_params = TestParams()
-    
+
     # SCHEMA FOR ALL
     data_schema = T.StructType([
         T.StructField('person_id', T.IntegerType(), False),
@@ -648,7 +728,7 @@ def test_consolidate_ethnicites():
         T.StructField('record_start_date', T.DateType(), False),
         T.StructField('ethnicity', T.StringType(), True)
     ])
-    
+
     expected_schema = T.StructType([
         T.StructField('person_id', T.IntegerType(), False),
         T.StructField('birth_date', T.DateType(), False),
@@ -657,7 +737,7 @@ def test_consolidate_ethnicites():
         T.StructField('ethnicity', T.StringType(), True),
         T.StructField('enhanced_ethnicity_flag', T.IntegerType(), True),
     ])
-    
+
     df_enhanced = spark.createDataFrame([
         (0, date(1960,1,1), 'journal', date(2022,1,1), 'A'),
         (1, date(1960,1,1), 'journal', date(2022,1,1), 'A'),
@@ -665,14 +745,14 @@ def test_consolidate_ethnicites():
         (4, date(1960,1,1), 'hes_ae', date(2022,1,1), 'B'),
         (7, date(1960,1,1), 'hes_op', date(2022,1,1), 'B'),
     ], data_schema)
-    
+
     df_known = spark.createDataFrame([
         (3, date(1960,1,1), 'cvdp_cohort', date(2022,1,1), 'A'),
         (5, date(1960,1,1), 'cvdp_cohort', date(2022,1,1), 'A'),
         (6, date(1960,1,1), 'cvdp_cohort', date(2022,1,1), 'B'),
         (8, date(1960,1,1), 'cvdp_cohort', date(2022,1,1), 'B')
     ], data_schema)
-  
+
     # EXPECTED DATA - DEMOGRAPHIC TABLE TEST DATAFRAME
     df_expected_demographic = spark.createDataFrame([
         (0, date(1960,1,1), 'journal', date(2022,1,1), 'A' , 1),
@@ -685,10 +765,10 @@ def test_consolidate_ethnicites():
         (7, date(1960,1,1), 'hes_op', date(2022,1,1), 'B', 1),
         (8, date(1960,1,1), 'cvdp_cohort', date(2022,1,1), 'B', 0)
     ], expected_schema)
-    
+
     with FunctionPatch('params',test_params):
         # STAGE INITIALISATION
-        stage = CreateDemographicTableStage(events_table_input = 'events', cvdp_cohort_journal_input = 'journal', 
+        stage = CreateDemographicTableStage(events_table_input = 'events', cvdp_cohort_journal_input = 'journal',
                                             hes_op_input = 'hes_op', hes_ae_input = 'hes_ae',demographic_table_output = None
                                            )
 
