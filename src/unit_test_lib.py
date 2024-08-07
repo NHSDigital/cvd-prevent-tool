@@ -17,13 +17,13 @@ from typing import List
 
 def run_unit_tests(test_notebook_list, parent_path: str = 'tests/unit_tests'):
   '''run_unit_tests
-  Function to handle the concurrent running of unit tests and capture of (A) Errors (B) Notebooks 
+  Function to handle the concurrent running of unit tests and capture of (A) Errors (B) Notebooks
   that have failed. Times execution of unit tests.
-  
+
   Args:
     test_notebook_list (List[str]): List of unit test notebooks (in parent_path) to run.
     parent_path (str, optional): The folder containing the unit test notebooks. Defaults to tests/unit_tests.
-    
+
   '''
   ## COUNTERS
   run_stage = 0
@@ -73,7 +73,7 @@ def run_unit_tests(test_notebook_list, parent_path: str = 'tests/unit_tests'):
 class NotebookData:
   '''NotebookData
   This class is responsible for identifying the notebook to submit for parallel running (via path) and
-  handling the running of the notebook (via dbutils.notebook.run). There is the option to retry notebooks 
+  handling the running of the notebook (via dbutils.notebook.run). There is the option to retry notebooks
   (self.retry) for n number of times (if notebook returns a failed status).
   '''
   def __init__(self, path, timeout, retry=0):
@@ -94,29 +94,29 @@ class NotebookData:
 
 def parallelNotebooks(notebooks, numInParallel):
   '''parallelNotebooks
-  Function is responsible for launching the parallel notebook run jobs, where notebooks are wrapped in the 
-  NotebookData class. The number of parallel notebook jobs can be user specified. 
-  Warning: If you create too many notebooks in parallel the driver may crash when you submit all of the 
+  Function is responsible for launching the parallel notebook run jobs, where notebooks are wrapped in the
+  NotebookData class. The number of parallel notebook jobs can be user specified.
+  Warning: If you create too many notebooks in parallel the driver may crash when you submit all of the
   jobs at once.
-  
+
   Args:
     notebooks (List[NotebookData]): A list of notebooks defined using the NotebookData class.
-    numInParallel (int):            Number of notebook jobs to run in parallel. 
+    numInParallel (int):            Number of notebook jobs to run in parallel.
   '''
   with ThreadPoolExecutor(max_workers=numInParallel) as ec:
-    return [ec.submit(NotebookData.submitNotebook, notebook) for notebook in notebooks]    
+    return [ec.submit(NotebookData.submitNotebook, notebook) for notebook in notebooks]
 
 def run_unit_tests_parallel(test_notebook_list: List[str], parent_path: str = 'tests/unit_tests', num_jobs: int = 2):
   '''run_unit_tests_parallel
   Version of run_unit_tests that allows for parallel running of unit test notebooks. The number of parallel jobs is specified by the
   num_jobs paramters.
-  Note: The default number of parallel jobs is set to 2. Be cautious of increasing the number of jobs (e.g. 8) as this can cause the 
+  Note: The default number of parallel jobs is set to 2. Be cautious of increasing the number of jobs (e.g. 8) as this can cause the
   parallel job handler to crash. Optimum range is 2 to 4 parallel jobs.
-  
+
   Args:
     test_notebook_list (List[str]): List of unit test notebooks (in parent_path) to run.
     parent_path (str, optional): The folder containing the unit test notebooks. Defaults to tests/unit_tests.
-    num_jobs (int, optional): Number of parallel jobs to run. Defaults to 2. 
+    num_jobs (int, optional): Number of parallel jobs to run. Defaults to 2.
   '''
   # Initialise run
   print('-' * 80)
