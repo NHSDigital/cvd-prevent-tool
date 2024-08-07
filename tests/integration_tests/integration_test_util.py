@@ -29,39 +29,41 @@ class PipelineAssetHasAlreadyBeenRedirected(Exception):
 @dataclass(frozen=True)
 class PipelineAssetValues():
   '''
-  A dataclass that holds the key discriminating information about PipelineAsset instances (see 
+  A dataclass that holds the key discriminating information about PipelineAsset instances (see
   pipeline/pipeline_util).
-  
-  This class holds the database and table name of the PipelineAsset. It is used by 
-  'IntegrationTestPipelineAsset' to map from real assets (where we don't want to store the data) to 
+
+  This class holds the database and table name of the PipelineAsset. It is used by
+  'IntegrationTestPipelineAsset' to map from real assets (where we don't want to store the data) to
   temporary assets (where we do want to store the data).
-  
+
   '''
   db: str
   full_table_name: str
-    
+  key: str
+  delta: bool
+
   def __hash__(self):
     if '.' in self.db or '.' in self.full_table_name:
       raise ValueError('The character "." is reserved and cannot be used in a database or table name.')
     return hash('.'.join([self.db, self.full_table_name]))
-  
+
   def __eq__(self, other):
     return isinstance(other, PipelineAssetValues) and hash(self) == hash(other)
-  
+
   @staticmethod
   def from_pipeline_asset(asset: PipelineAsset):
-    return PipelineAssetValues(db=asset.db, full_table_name=asset.table)
+    return PipelineAssetValues(db=asset.db, full_table_name=asset.table, key=asset.key, delta=asset.delta_table)
 
 
 class IntegrationTestPipelineAsset(PipelineAsset):
   '''
-  In the integration test (see 'run_integration_test' and 'IntegrationTestManager' below) this class is 
-  used to mock the 'PipelineAsset' class (see pipeline/pipeline_util). This class inherits from and 
-  overwrites the read and write functionality of the PipelineAsset and redirects the data to/from a 
-  temporary table. This class has a class variable (_redirected_asset_mapping) that stores the mappings 
-  from the real locations, to the redirected fake locations. Note that a class variable means that the 
+  In the integration test (see 'run_integration_test' and 'IntegrationTestManager' below) this class is
+  used to mock the 'PipelineAsset' class (see pipeline/pipeline_util). This class inherits from and
+  overwrites the read and write functionality of the PipelineAsset and redirects the data to/from a
+  temporary table. This class has a class variable (_redirected_asset_mapping) that stores the mappings
+  from the real locations, to the redirected fake locations. Note that a class variable means that the
   mapping is shared between all instances of this class.
-  
+
   This class provides a function for deleting the fake tables after the tests have finished.
   '''
 
@@ -78,43 +80,134 @@ class IntegrationTestPipelineAsset(PipelineAsset):
     if values in self._redirected_asset_mapping:
       values = self._redirected_asset_mapping[values]
     return f'{values.db}.{values.full_table_name}'
-    
-  def _create_table(self, df: DataFrame, db_name: str, full_table_name: str, overwrite=False):
+
+  @property
+  def delta_bool(self):
+    boole = PipelineAssetValues.from_pipeline_asset(self)
+    return boole.delta
+
+  @property
+  def archive_name(self):
+    '''
+    Returns the fake asset name with clone name suffix, if fake name exists in mapping
+    '''
     real_values = PipelineAssetValues.from_pipeline_asset(self)
-    temp_table_name = f'_tmp_integration_{real_values.full_table_name}_{datetime.now().strftime("runtime_%H_%M_%S")}'
-    fake_values = PipelineAssetValues(db=self.test_db, full_table_name=temp_table_name)
-    
+    fake_values = self._redirected_asset_mapping[real_values]
+    return f'{fake_values.db}.{fake_values.full_table_name}_cloned_table'
+
+  def _create_table(self, df: DataFrame, db_name: str, full_table_name: str, overwrite=False):
+    '''
+    Maps the real pipeline asset values (db.table) to the temporary tables created when writing
+    the asset. Raises an error if the pipeline asset has already been mapped (written).
+    '''
+    real_values = PipelineAssetValues.from_pipeline_asset(self)
+    temp_table_name = f'_tmp_integration_{real_values.full_table_name}_{datetime.now().strftime("runtime_%Y_%m_%d_%H_%M_%S")}'
+    fake_values = PipelineAssetValues(db=self.test_db, full_table_name=temp_table_name, key=self.key, delta=self.delta_bool)
+
     if real_values in self._redirected_asset_mapping:
       raise PipelineAssetHasAlreadyBeenRedirected(f'PipelineAsset with key "{real_values.key}" has '
                                                   'already been redirected. A feature to overwrite '
                                                   'redirects has not been implemented.')
-    
+
     print(f'INFO: Redirecting asset {real_values.db}.{real_values.full_table_name} to '
           f'{fake_values.db}.{fake_values.full_table_name} for the integration test.')
     self._redirected_asset_mapping[real_values] = fake_values
-    
-    super(IntegrationTestPipelineAsset, self)._create_table(df, fake_values.db, fake_values.full_table_name, 
+
+    super(IntegrationTestPipelineAsset, self)._create_table(df, fake_values.db, fake_values.full_table_name,
                                                             overwrite=overwrite)
-    
+
+  def _create_delta_table(self, df: DataFrame, db_name: str, full_table_name: str):
+    '''
+    Maps the real pipeline asset values (db.table) to the temporary tables created when writing
+    the asset. Raises an error if the pipeline asset has already been mapped (written).
+    Used specifically for delta table writing.
+    '''
+    real_values = PipelineAssetValues.from_pipeline_asset(self)
+    temp_table_name = f'_tmp_integration_{real_values.full_table_name}_{datetime.now().strftime("runtime_%Y_%m_%d_%H_%M_%S")}'
+    fake_values = PipelineAssetValues(db=self.test_db, full_table_name=temp_table_name, key=self.key, delta=self.delta_bool)
+
+    if real_values in self._redirected_asset_mapping:
+      raise PipelineAssetHasAlreadyBeenRedirected(f'PipelineAsset with key "{real_values.key}" has '
+                                                  'already been redirected. A feature to overwrite '
+                                                  'redirects has not been implemented.')
+
+    print(f'INFO: Redirecting asset {real_values.db}.{real_values.full_table_name} to '
+          f'{fake_values.db}.{fake_values.full_table_name} for the integration test.')
+    self._redirected_asset_mapping[real_values] = fake_values
+
+    super(IntegrationTestPipelineAsset, self)._create_delta_table(
+      df = df,
+      db_name = fake_values.db,
+      full_table_name = fake_values.full_table_name
+      )
+
+  def _optimise_delta_table(self, db_name: str, full_table_name: str):
+    '''
+    Using the temporary mapping values, following from self._create_delta_table, this applies the
+    mapping to the _optimise_delta_table function (to correctly optimise temporary asset rather
+    than real asset).
+    '''
+    real_values = PipelineAssetValues.from_pipeline_asset(self)
+    fake_values = self._redirected_asset_mapping[real_values]
+
+    super(IntegrationTestPipelineAsset, self)._optimise_delta_table(
+      db_name = fake_values.db,
+      full_table_name = fake_values.full_table_name
+      )
+
+  def _clone_delta_table(self, db_name: str, table_name_source: str, table_name_target: str):
+    '''
+    Maps the temporary pipeline asset values (from self._create_delta_table) to a set of cloned
+    assets (table name with suffix _cloned_table). Assigns this cloned asset to a cloned key in
+    _redirected_asset_mapping to avoid asset collisions and ensure cloned temporary table is
+    removed post-integration test.
+    '''
+    real_values = PipelineAssetValues.from_pipeline_asset(self)
+    fake_values = self._redirected_asset_mapping[real_values]
+    archived_key = PipelineAssetValues(db=self.test_db, full_table_name=f'{fake_values.full_table_name}_cloned_key', key=self.key, delta=self.delta_bool)
+    archived_values = PipelineAssetValues(db=self.test_db, full_table_name=f'{fake_values.full_table_name}_cloned_table', key=self.key, delta=self.delta_bool)
+
+    print(f'INFO: Redirecting asset clone {fake_values.db}.{fake_values.full_table_name} to '
+          f'{archived_values.db}.{archived_values.full_table_name} for the integration test.')
+    self._redirected_asset_mapping[archived_key] = archived_values
+
+    super(IntegrationTestPipelineAsset, self)._clone_delta_table(
+      db_name = fake_values.db,
+      table_name_source = fake_values.full_table_name,
+      table_name_target = archived_values.full_table_name
+    )
+
   def _table_exists(self, db, full_table_name):
-    values = PipelineAssetValues(db=db, full_table_name=full_table_name)
-    
+    values = PipelineAssetValues(db=db, full_table_name=full_table_name, key=self.key, delta=self.delta_bool)
+
     if values in self._redirected_asset_mapping:
       values = self._redirected_asset_mapping[values]
 
     super(IntegrationTestPipelineAsset, self)._table_exists(values.db, values.full_table_name)
-    
+
+  def _table_exists_delta(self, db, full_table_name):
+    values = PipelineAssetValues(db=db, full_table_name=full_table_name, key=self.key, delta=self.delta_bool)
+
+    if values in self._redirected_asset_mapping:
+      values = self._redirected_asset_mapping[values]
+
+    super(IntegrationTestPipelineAsset, self)._table_exists_delta(values.db, values.full_table_name)
+    return False
+
   @staticmethod
   def assert_real_assets_not_created():
     '''
-    Check that none of the real asset values in the mapping were accidentally create. Raises and 
-    error if any were created.
+    Check that none of the real asset values in the mapping were accidentally create. Raises and
+    error if any were created. This is bypassed for delta tables.
     '''
     for key in IntegrationTestPipelineAsset._redirected_asset_mapping.keys():
-      if table_exists(key.db, key.full_table_name):
+      if key.delta:
+        print(f'Delta table asset located at {key.db}.{key.full_table_name} was created prior to this test.'
+             'Therefore, no error rasied.')
+      elif table_exists(key.db, key.full_table_name):
         raise AssertionError(f'Real asset {key.db}.{key.full_table_name} was created during the test. '
                               'Therefore the test has failed.')
-  
+
   @staticmethod
   def delete_temp_tables():
     '''
@@ -128,21 +221,21 @@ class IntegrationTestPipelineAsset(PipelineAsset):
         print(f'INFO: Deleting temp table {value.db}.{value.full_table_name} that was created during the integration test.')
         drop_table(value.db, value.full_table_name)
         assert table_exists(value.db, value.full_table_name) is False
-    
+
 
 class IntegrationTestManager():
   '''
-  Class to facilitate integration testing. This class is a context manager. It replaces the 
-  'PipelineAsset' class with the 'IntegrationTestPipelineAsset' class which then redirects the data 
-  to temporary tables instead of the real tables. When the context ends this class checks to make 
-  sure none of the real data locations have been accidentally created, an error is raised if there is 
+  Class to facilitate integration testing. This class is a context manager. It replaces the
+  'PipelineAsset' class with the 'IntegrationTestPipelineAsset' class which then redirects the data
+  to temporary tables instead of the real tables. When the context ends this class checks to make
+  sure none of the real data locations have been accidentally created, an error is raised if there is
   a problem. When the context ends all of the temporary tables are deleted.
-  
+
   '''
   def __init__(self, test_db, save_integration_output):
     self._test_db = test_db
     self._save_integration_output = save_integration_output
-    
+
   def __enter__(self):
     IntegrationTestPipelineAsset.test_db = self._test_db
     self._pipeline_asset_mock = FunctionPatch('PipelineAsset', IntegrationTestPipelineAsset)
@@ -158,36 +251,37 @@ class IntegrationTestManager():
     finally:
       if not self._save_integration_output:
         IntegrationTestPipelineAsset.delete_temp_tables()
-    
+
 
 # COMMAND ----------
 
-def run_integration_test(_param: Params, stages: List[PipelineStage], test_db: str, limit: bool,
-                         save_integration_output: bool = False, check_func: Callable[[PipelineContext], PipelineContext] = None) -> PipelineContext:
+def run_integration_test(
+  _param: Params,
+  stages: List[PipelineStage],
+  test_db: str,
+  limit: bool,
+  save_integration_output: bool = False,
+  check_func: Callable[[PipelineContext], PipelineContext] = None
+  ) -> PipelineContext:
   '''
-  Run the given pipeline in integration test mode. This runs the entire pipeline in the usual way, but it 
-  redirects the read and write functions of the pipeline such that any data is saved in temporary tables 
-  that are then deleted at the end of the test. See the top of this file and the associated classes for 
+  Run the given pipeline in integration test mode. This runs the entire pipeline in the usual way, but it
+  redirects the read and write functions of the pipeline such that any data is saved in temporary tables
+  that are then deleted at the end of the test. See the top of this file and the associated classes for
   more information.
-  
-  Using temporary table names means that anyone can run integration tests at the same time, without any 
+
+  Using temporary table names means that anyone can run integration tests at the same time, without any
   collisions.
-  
+
   _config: An instance of the Config object.
   stages: The list of PipelineStage class instances that define the pipeline.
   test_db: The database where the temporary tables will be created.
-  check_func: An optional function with the signature Func(PipelineContext) -> PipelineContext. It is run 
+  check_func: An optional function with the signature Func(PipelineContext) -> PipelineContext. It is run
   after the pipeline and can be used to check the resulting data.
-  
+
   '''
   version = 'intver'
-  with IntegrationTestManager(test_db, save_integration_output) as manager:  
+  with IntegrationTestManager(test_db, save_integration_output) as manager:
     context = run_pipeline(version, _param, stages, limit)
-    
     if check_func is not None:
         context = check_func(context)
-       
   return context
-
-# COMMAND ----------
-
