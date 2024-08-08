@@ -29,6 +29,8 @@ from dsp.validation.validator import compare_results
 
 suite = FunctionTestSuite()
 
+## The following are fake people and data created for test purposes
+
 # COMMAND ----------
 
 @suite.add_test
