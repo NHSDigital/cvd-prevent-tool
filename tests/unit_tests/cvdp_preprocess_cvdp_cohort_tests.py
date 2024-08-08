@@ -24,13 +24,15 @@ from dsp.validation.validator import compare_results
 
 suite = FunctionTestSuite()
 
+## The following are fake people and data created for test purposes
+
 # COMMAND ----------
 
 @suite.add_test
 def test_cvdp_remove_invalid_nhs():
 
     df_input = spark.createDataFrame([
-        (0, '5521303359'),
+        (0, 'xxxxxxxxxx'),
         (1, '222222222'),   # Removed: 9 digits
         (2, '33333333333'), # Removed: 11 digits
         (3, '0000000000'),  # Removed: Matching full nhs number
@@ -41,7 +43,7 @@ def test_cvdp_remove_invalid_nhs():
 
 
     df_expected = spark.createDataFrame([
-        (0, '5521303359'),
+        (0, 'xxxxxxxxxxx'),
     ], ['idx', 'id'])
 
     df_actual = cvdp_remove_invalid_nhs(
