@@ -28,6 +28,8 @@ from uuid import uuid4
 
 suite = FunctionTestSuite()
 
+## The following are fake people and data created for test purposes
+
 # COMMAND ----------
 
 @suite.add_test
