@@ -15,6 +15,8 @@ from pyspark.sql.types import StructType, StructField, IntegerType, StringType, 
 
 suite = FunctionTestSuite()
 
+## The following are fake people and data created for test purposes
+
 # COMMAND ----------
 
 @dataclass(frozen=True)
