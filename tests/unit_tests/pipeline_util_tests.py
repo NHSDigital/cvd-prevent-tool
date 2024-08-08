@@ -26,6 +26,8 @@ from pyspark.sql.utils import AnalysisException
 
 suite = FunctionTestSuite()
 
+## The following are fake people and data created for test purposes
+
 # COMMAND ----------
 
 @dataclass(frozen=True)
