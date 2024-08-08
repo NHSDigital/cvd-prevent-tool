@@ -25,6 +25,8 @@ from pyspark.sql.types import StructType, StructField, TimestampType, IntegerTyp
 
 suite = FunctionTestSuite()
 
+## The following are fake people and data created for test purposes
+
 @suite.add_test
 def test_map_diagnosis_codes ():
 
