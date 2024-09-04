@@ -20,7 +20,7 @@
 
 import pyspark.sql.functions as F
 
-from pyspark.sql import DataFrame 
+from pyspark.sql import DataFrame
 
 # COMMAND ----------
 
@@ -64,9 +64,9 @@ class CreatePatientTableStage(PipelineStage):
 
     # Public run method
     def _run(self, context, log):
-      
+
         log._add_stage(self.name)
-      
+
         log._timer(self.name)
         # Load the required stage assets
         self._load_data_assets(context)
@@ -87,16 +87,19 @@ class CreatePatientTableStage(PipelineStage):
         self._format_patient_table()
         # Check formatting and data quality of patient table
         self._check_patient_table()
-        
+
         log._timer(self.name, end=True)
-        
+
         # Return pipeline asset
         return {
             self._patient_table_output: PipelineAsset(
-                self._patient_table_output,
-                context,
-                df=self._data_holder["patient"],
-                cache=True,
+                key = self._patient_table_output,
+                context = context,
+                db = params.DATABASE_NAME,
+                df = self._data_holder["patient"],
+                cache = False,
+                delta_table = True,
+                delta_columns = [params.PID_FIELD,params.DOB_FIELD]
             )
         }
 
@@ -115,7 +118,7 @@ class CreatePatientTableStage(PipelineStage):
         """create_base_table
         Creates the patient table from the events table, cohort based events.
         (dataset = cvdp_cohort; category = cohort_extract).
-        
+
         Functions:
             pipeline/create_patient_table_lib::extract_patient_events
             pipeline/create_patient_table_lib::format_base_patient_table_schema
@@ -140,7 +143,7 @@ class CreatePatientTableStage(PipelineStage):
             df = df.drop(*params.DEMOGRAPHIC_FIELDS_TO_ENHANCE)
         # Map base columns to final base table schema (column renaming)
         df = format_base_patient_table_schema(
-            df = df, 
+            df = df,
             mapping_cols = params.PATIENT_TABLE_BASE_MAPPING,
             field_practice_identifier = params.CODE_ARRAY_FIELD
             )
@@ -154,16 +157,16 @@ class CreatePatientTableStage(PipelineStage):
         Currently this just includes ethnicity.
         """
         df = self._data_holder["patient"]
-        
+
         pid_fields = [params.PID_FIELD, params.DOB_FIELD]
         demographic_fields = params.DEMOGRAPHIC_FIELDS_TO_ENHANCE
-        
+
         df_demographics = self._data_holder["demographics"].select(*pid_fields, *demographic_fields)
-        
+
         df = df.join(df_demographics, on=pid_fields, how='left')
-        
+
         self._data_holder["patient"] = df
-        
+
     # Events Table Data: Add death information
     def _add_deaths_data(self):
         """_add_deaths_data
@@ -189,7 +192,7 @@ class CreatePatientTableStage(PipelineStage):
         )
         # Return
         self._data_holder["patient"] = df_patient
-        
+
     # Events Table Data: Add hospitalisation data
     def _add_hospitalisation_data(self):
         """
@@ -202,7 +205,7 @@ class CreatePatientTableStage(PipelineStage):
         df_events = self._data_holder["events"]
 
         df_events = extract_patient_events(
-            df=df_events, value_dataset=params.HES_APC_TABLE, value_category=params.EVENTS_HES_SPELL_CATEGORY)
+            df=df_events, value_dataset=params.HES_APC_TABLE, value_category=params.EVENTS_HES_APC_SPELL_CATEGORY)
 
         self._data_holder["patient"] = add_stroke_mi_information(
             patient_table=df, events_table=df_events, keep_nulls=True, keep_inclusive=True)
@@ -215,21 +218,21 @@ class CreatePatientTableStage(PipelineStage):
                     Also adds a flag column if the patient died within 30 days of a hospitalisation
                     Updates the patient table with the given columns
         """
-        
+
         df_patient = self._data_holder["patient"]
         df_events = self._data_holder["events"]
-        
+
         df_patient = df_patient.join(self._data_holder["diag_flags"], params.GLOBAL_JOIN_KEY, "left")
-        
+
         # FILTER ONLY EPISODES
-        df_events = extract_patient_events(df = df_events, value_dataset = params.HES_APC_TABLE, value_category = params.EVENTS_HES_EPISODE_CATEGORY)
+        df_events = extract_patient_events(df = df_events, value_dataset = params.HES_APC_TABLE, value_category = params.EVENTS_HES_APC_EPISODE_CATEGORY)
 
         df_indicators = create_patient_table_flags(
         df=df_patient, events=df_events
         )
-        
+
         self._data_holder["patient"] = df_indicators
-        
+
     # Events Table Data: Add hypertension data
     def _add_hypertension_data(self):
         """
@@ -245,15 +248,15 @@ class CreatePatientTableStage(PipelineStage):
             value_dataset=params.EVENTS_CVDP_HTN_DATASET,
             value_category=params.EVENTS_CVDP_HTN_CATEGORY
         )
-        
+
         # Risk group assignment
         df = assign_htn_risk_groups(
-            patient_table = df, 
+            patient_table = df,
             events_table = df_events
         )
-        
+
         self._data_holder["patient"] = df
-        
+
     # Format the patient table to the final output schema
     def _format_patient_table(self):
         """_format_patient_table

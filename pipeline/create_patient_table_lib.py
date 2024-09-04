@@ -23,14 +23,14 @@ def format_base_patient_table_schema(
     field_practice_identifier: str = params.CODE_ARRAY_FIELD,
     ) -> DataFrame:
     """format_base_patient_table_schema
-    Converts columns to correct data type and maps columns in the base table to column names 
+    Converts columns to correct data type and maps columns in the base table to column names
     specified in the mapping_cols dictionary {old_column: new_column}.
 
     Args:
         df (DataFrame): DataFrame containing columns to be mapped
-        mapping_cols (Dict[str,str], optional): Dictionary of column mappings {old_column : new column}. 
+        mapping_cols (Dict[str,str], optional): Dictionary of column mappings {old_column : new column}.
                                                 Defaults to params.PATIENT_TABLE_BASE_MAPPING.
-        field_practice_identifier (str, optional): Column name for field containing array with practice identifier. 
+        field_practice_identifier (str, optional): Column name for field containing array with practice identifier.
                                                 Defaults to params.CODE_ARRAY_FIELD.
 
     Returns:
@@ -55,7 +55,7 @@ def extract_patient_events(
     df: DataFrame,
     value_dataset: str,
     value_category: str,
-    field_dataset: str = params.DATASET_FIELD, 
+    field_dataset: str = params.DATASET_FIELD,
     field_category: str = params.CATEGORY_FIELD,
 ) -> DataFrame:
     """extract_patient_events
@@ -64,16 +64,16 @@ def extract_patient_events(
     Args:
         df (DataFrame): Events table
         value_dataset (str): Value(s) to filter the events table on, for datasets.
-        value_category (str): Value(s) to filter the events table on, for dataset categories. 
+        value_category (str): Value(s) to filter the events table on, for dataset categories.
         field_dataset (str, optional): Column name for field containing dataset values. Defaults to params.DATASET_FIELD.
         field_category (str, optional): Column name for field containing dataset category values. Defaults to params.CATEGORY_FIELD.
 
     Returns:
-        DataFrame: Sub-set of events table, filtered by dataset and dataset category. 
-    """    
+        DataFrame: Sub-set of events table, filtered by dataset and dataset category.
+    """
     df = df.filter(
         (F.col(field_dataset) == value_dataset)
-        & 
+        &
         (F.col(field_category) == value_category)
     )
     return df
@@ -105,8 +105,8 @@ def add_stroke_mi_information(
     value_flag_stroke: str = params.STROKE_FLAG,
 ) -> DataFrame:
     """add_stroke_mi_information
-    
-    Adds counts and maximum dates (from events) for Stroke and MI events, per patients. 
+
+    Adds counts and maximum dates (from events) for Stroke and MI events, per patients.
     For patients that have died, any events after their date of death are removed.
     Note: These counts should only be generated from spell dataframes when in the CreatePatientTable stage.
 
@@ -144,8 +144,8 @@ def add_stroke_mi_information(
 
     Returns:
         patient_table (DataFrame): Intermediate dataframe containing original patient table information, plus the counts
-            and maximum dates (latest) for stroke and mi spell events. 
-                        
+            and maximum dates (latest) for stroke and mi spell events.
+
     Associated:
         pipeline/create_patient_table::CreatePatientTableStage._add_hospitalisation_data()
     """
@@ -165,7 +165,7 @@ def add_stroke_mi_information(
     stroke_events = (
       filtered_deaths
       .filter(
-        (F.array_contains(F.col(field_flag_assoc), value_flag_stroke)) | 
+        (F.array_contains(F.col(field_flag_assoc), value_flag_stroke)) |
         (F.col(field_flag) == value_flag_stroke)
       )
     )
@@ -293,7 +293,7 @@ def add_30_days_flag(df: DataFrame, events: DataFrame) -> DataFrame:
 
 
 def create_patient_table_flags(df: DataFrame, events: DataFrame) -> DataFrame:
-  
+
     '''create_patient_table_flags
         SUMMARY:
           Adds two flags to the dataframe, being whether a person has died under 75, and whether they have died within 30 days of a hospitalisation
@@ -319,7 +319,7 @@ def create_patient_table_flags(df: DataFrame, events: DataFrame) -> DataFrame:
         extra_column_check = params.DEATH_FLAG,
         keep_non_nulls = True,
     )
-    
+
     # ADD FLAG FOR DEATH BEFORE 30 DAYS AFTER HOSPITALISATION
     all_flags = add_30_days_flag(df_flag, events)
 
@@ -346,26 +346,26 @@ def assign_htn_risk_groups(
     """assign_htn_risk_groups
     Extracts the latest hypertension risk group from the events table, for each patient. Joins to the patient
     table and yields the new column with values of hypertension risk group values. Blood pressure events are
-    filtered to keep the latest 12 months of readings since a patient's latest extract date. Patients that 
+    filtered to keep the latest 12 months of readings since a patient's latest extract date. Patients that
     have no hypertension diagnosis date are assigned the flag '-1' (not hypertensive).
 
     Args:
         patient_table (DataFrame): Dataframe of patient table data.
         events_table (DataFrame): Dataframe of events table data filtered to blood pressure records only.
-        col_htn_risk_group (str, optional): New column name for hypertension risk group values. 
+        col_htn_risk_group (str, optional): New column name for hypertension risk group values.
             Defaults to params.CVDP_HYP_RISK_FIELD.
         field_htn_diag_date (str, optional): Patient table column containg the hypertension diagnosis date values.
             Defaults to f'{params.HYPERTENSION_FLAG_PREFIX}_{params.DICT_FLAG_SUFFIX}'.
         field_htn_events_flag (str, optional): Events table column containing calculated hypertension risk groups.
             Defaults to params.FLAG_FIELD.
-        field_htn_event_date (str, optional): Events table column containing date to filter (keeping latest record). 
+        field_htn_event_date (str, optional): Events table column containing date to filter (keeping latest record).
             Defaults to params.RECORD_STARTDATE_FIELD.
-        fields_join_cols (List[str], optional): Events table columns use to join to the patient table, yielding the 
-            hypertension risk group column. 
+        fields_join_cols (List[str], optional): Events table columns use to join to the patient table, yielding the
+            hypertension risk group column.
             Defaults to [params.PID_FIELD,params.DOB_FIELD].
         field_patient_dob (str, optional): Name of column containing date of birth (date type).
             Defaults to params.DOB_FIELD.
-        field_patient_extract_date (str, optional): Patient table column containing the latest extract date from CVDP 
+        field_patient_extract_date (str, optional): Patient table column containing the latest extract date from CVDP
             for each individual.
             Defaults to params.LATEST_EXTRACT_DATE.
         field_patient_pid (str, optional): Name of column containing (NHS Number | Person ID).
@@ -374,10 +374,10 @@ def assign_htn_risk_groups(
     Returns:
         DataFrame: Patient table updated with hypertension risk groups for each individual
     """
-    
+
     # Patient table: select the person identifiable columns and the latest extract date columns
     tmp_patient_table = patient_table.select(field_patient_pid,field_patient_dob,field_patient_extract_date)
-    
+
     # Join the Events and Patient tables (tmp) to obtain the latest extract date for each perso
     events_table = (
         events_table
@@ -387,7 +387,7 @@ def assign_htn_risk_groups(
             'left'
         )
     )
-    
+
     # Remove any hypertension records that have not occured within the last 12 months of a patients extract date
     events_table = (
         events_table
@@ -399,14 +399,14 @@ def assign_htn_risk_groups(
         .filter((F.col('tmp_htn_months_between') >= 0) & (F.col('tmp_htn_months_between') <= 12))
         .drop('tmp_htn_months_between',field_patient_extract_date)
     )
-    
+
     # Keep the latest record per patient from this 12 month window
     events_table = filter_latest(
         df = events_table,
         window_fields = [field_patient_pid,field_patient_dob],
         date_field = field_htn_event_date
     )
-    
+
     # Add the hypertension data to the patient table
     fields_events_select = fields_join_cols + [field_htn_events_flag]
     patient_table = (
@@ -421,7 +421,7 @@ def assign_htn_risk_groups(
             col_htn_risk_group
         )
     )
-    
+
     # Add invalid risk group when hypertension risk diagnosis contains a date value but no blood pressure reading is found, -1 if no HTN flag
     patient_table = (
         patient_table
@@ -431,6 +431,6 @@ def assign_htn_risk_groups(
             .when((F.col(field_htn_diag_date).isNull()),'-1')
             .otherwise(F.col(col_htn_risk_group)))
     )
-    
+
     # Return dataframe
     return patient_table

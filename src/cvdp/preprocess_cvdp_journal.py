@@ -13,6 +13,7 @@
 
 ## MODULE IMPORTS
 import pyspark.sql.functions as F
+from datetime import date
 
 from pyspark.sql import DataFrame, Window
 from typing import List, Union
@@ -21,27 +22,27 @@ from typing import List, Union
 
 ## Explode Journal Columns
 def cvdp_explode_journal_columns(
-    df: DataFrame, 
-    fields_select: List[str] = params.CVDP_JOURNAL_INPUT_COLUMNS, 
+    df: DataFrame,
+    fields_select: List[str] = params.CVDP_JOURNAL_INPUT_COLUMNS,
     field_explode: str = params.CVDP_JOURNAL_FIELD,
     field_explode_select: List[str] = params.CVDP_JOURNAL_EXPLODE_COLUMNS
 ) -> DataFrame:
     """cvdp_explode_journal_columns
     Processes the journal table column and explodes the nested array to produce the full journal table
-    data. 
+    data.
 
     Args:
         df (DataFrame): DataFrame containing the journal table array column.
         fields_select (List[str], optional): List of fields to subset from the DataFrame, forms the base journal table.
             Defaults to params.CVDP_JOURNAL_INPUT_COLUMNS.
-        field_explode (str, optional): Column containing the journal table entries. 
+        field_explode (str, optional): Column containing the journal table entries.
             Defaults to params.CVDP_JOURNAL_FIELD.
-        field_explode_select (List[str], optional): Columns within the journal table array to select and extract. 
+        field_explode_select (List[str], optional): Columns within the journal table array to select and extract.
             Defaults to params.CVDP_JOURNAL_EXPLODE_COLUMNS.
 
     Returns:
-        DataFrame: DataFrame with addded journal table entries as defined by function arguments. 
-    """    
+        DataFrame: DataFrame with addded journal table entries as defined by function arguments.
+    """
     ## Subset and Explode Struct Column in DataFrame
     fields_full_select = fields_select + [field_explode]
     df = (
@@ -61,17 +62,17 @@ def cvdp_create_journal_array(
     field_array_code: str = params.CODE_ARRAY_FIELD,
     field_array_values: Union[List[str], str] = [params.CVDP_CODE_VALUE1_FIELD, params.CVDP_CODE_VALUE2_FIELD]) -> DataFrame:
     """cvdp_create_journal_array
-    Creates a new field containing an array combining fields from the eligible cohort table. 
+    Creates a new field containing an array combining fields from the eligible cohort table.
 
     Args:
         df (DataFrame): DataFrame output from preprocess_cvdp_cohort (see src.cvdp::preprocess_cvdp_cohort)
         field_array_code (str, optional): Name of new array column. Defaults to params.CODE_ARRAY_FIELD
-        field_array_values (Union[List[str], str], optional): List of fields to combine to make array. 
+        field_array_values (Union[List[str], str], optional): List of fields to combine to make array.
             Defaults to [params.CVDP_CODE_VALUE1_FIELD, params.CVDP_CODE_VALUE2_FIELD]
 
     Returns:
         DataFrame: DataFrame including new array field
-    """    
+    """
     ## Type convert: supplied columns
     if type(field_array_values) == str:
         field_array_values = [field_array_values]
@@ -88,9 +89,9 @@ def cvdp_deduplicate_journal_entries(
     order_descending_date: bool = params.SWITCH_CVDP_JOURNAL_ORDER_DESC
 ) -> DataFrame:
     """cvdp_deduplicate_journal_entries
-    Deduplicates the exploded and array-formatted journal table on partitions, and orders the deduplication by the window order 
-    argument. By default, this keeps the latest journal entry (code) and associated values (value 1 and value 2), per extraction 
-    date - keeping the latest journal record for that particular entry. This ensures that if journal records have been updated 
+    Deduplicates the exploded and array-formatted journal table on partitions, and orders the deduplication by the window order
+    argument. By default, this keeps the latest journal entry (code) and associated values (value 1 and value 2), per extraction
+    date - keeping the latest journal record for that particular entry. This ensures that if journal records have been updated
     in a later extract, only that record is retained.
 
     Args:
@@ -103,10 +104,10 @@ def cvdp_deduplicate_journal_entries(
                                             Defaults to params.SWITCH_CVDP_JOURNAL_ORDER_DESC.
 
     Returns:
-        DataFrame: Journal table with entries deduplicated on partition fields, ordered by date column to yield a single row for values 
+        DataFrame: Journal table with entries deduplicated on partition fields, ordered by date column to yield a single row for values
                     in the partition fields.
-    """    
-    
+    """
+
     # Create deduplication window (partition and order)
     # > Conditional: order_descending_date == True
     if order_descending_date == True:
@@ -117,44 +118,44 @@ def cvdp_deduplicate_journal_entries(
     # Deduplicate journal entries
     df = (
         df
-        .withColumn('rank', F.rank().over(windowval))
+        .withColumn('rank', F.row_number().over(windowval))
         .filter(F.col('rank') == 1)
-        .drop('rank')
+        .drop(F.col('rank'))
     )
-    
+
     # Return dataframe
     return df
 
 ## Load REF Data
-def load_ref_codes(
-    db: str = params.DSS_CORPORATE_DATABASE, 
-    table: str = params.REF_CODES_TABLE, 
-    active_field: str = params.REF_ACTIVE_FIELD,
+def process_ref_codes(
+    db: str = params.DSS_CORPORATE_DATABASE,
+    table: str = params.REF_CODES_TABLE,
+    active_in_refset: str = params.REF_ACTIVE_IN_REFSET,
     output_fields: List[str] = [params.REF_CODE_FIELD, params.REF_CLUSTER_FIELD]
 ) -> DataFrame:
-    '''load_ref_codes
-    Creates a dataframe containing the SNOMED codes and all classifications.
+    '''process_ref_codes
+    Creates a dataframe containing the SNOMED codes and all cluster classifications.
 
     Args:
         db (str): Database where the codes can be found. Defaults to params.DSS_CORPORATE_DATABASE.
         table (str): Table where the codes can be found. Defaults to params.REF_CODES_TABLE.
-        active_field (str): Field to filter out inactive references. Defaults to params.REF_ACTIVE_FIELD.
-        output_fields (List[str]): List of output fields to select from the final output DataFrame. 
+        active_in_refse (str): Field to filter out codes not active in the refset. Defaults to params.REF_ACTIVE_INREFSET.
+        output_fields (List[str]): List of output fields to select from the final output DataFrame.
             Defaults to [params.REF_CODE_FIELD, params.REF_CLUSTER_FIELD]
 
     Returns:
-        df (DataFrame): Processed dataframe 
+        df (DataFrame): Processed dataframe
     '''
     ## Load Reference Codes
-    ref_codes = spark.table(f'{db}.{table}')
-    ref_codes = ref_codes.filter(F.col(active_field) == 1)
+    ref_codes = read_table(db, table)
+    ref_codes = ref_codes.filter(F.col(active_in_refset) == 1)
     ## Return
     return ref_codes.select(output_fields)
 
 ## Join REF Data
 def join_ref_data(
-    df: DataFrame, 
-    join_field: str = params.CVDP_CODE_FIELD, 
+    df: DataFrame,
+    join_field: str = params.CVDP_CODE_FIELD,
     ref_join_field: str = params.REF_CODE_FIELD
 ) -> DataFrame:
     '''join_ref_data
@@ -166,10 +167,11 @@ def join_ref_data(
         ref_join_field (str): Field from reference data, to join to df. Defaults to params.REF_CODE_FIELD.
 
     Returns:
-        df (DataFrame): Processed dataframe 
+        df (DataFrame): Processed dataframe
     '''
     ## Load REF Data
-    ref_codes = load_ref_codes()
+    ref_codes = process_ref_codes()
+    
     ## Join Data
     joined_df = df.join(
         ref_codes,
@@ -182,33 +184,56 @@ def join_ref_data(
 ## Main Preprocessing Function*
 def preprocess_cvdp_journal(
     df: DataFrame,
-    fields_cohort_window: List[str] = [params.CVDP_PID_FIELD, params.CVDP_DOB_FIELD],
     field_extract_date: str = params.CVDP_EXTRACT_DATE,
     add_ref_data: bool = params.SWITCH_CVDP_JOURNAL_ADD_REF_DATA,
-    fields_select: str = params.CVDP_JOURNAL_INPUT_COLUMNS, 
+    fields_select: str = params.CVDP_JOURNAL_INPUT_COLUMNS,
     field_explode: str = params.CVDP_JOURNAL_FIELD,
     field_explode_select: str = params.CVDP_JOURNAL_EXPLODE_COLUMNS,
     field_array_code: str = params.CODE_ARRAY_FIELD,
     field_array_values: List[str] = [params.CVDP_CODE_VALUE1_FIELD, params.CVDP_CODE_VALUE2_FIELD],
-    join_field: str = params.CVDP_CODE_FIELD, 
+    join_field: str = params.CVDP_CODE_FIELD,
     ref_join_field: str = params.REF_CODE_FIELD,
-    fields_window_partition: List[str] = params.CVDP_JOURNAL_DEDUPLICATION_FIELDS
+    fields_window_partition: List[str] = params.CVDP_JOURNAL_DEDUPLICATION_FIELDS,
+    col_hashed_key: str = params.CVDP_JOURNAL_PRIMARY_KEY,
+    fields_to_hash: List[str] = params.CVDP_JOURNAL_HASHABLE_FIELDS,
 ) -> DataFrame:
     """preprocess_cvdp_journal
+
     Processes the eligible cohort table (from src.cvdp::preprocess_cvdp_cohort) and converts into a journal table
 
     Args:
-        df (DataFrame): DataFrame containing the eligible patient cohort data (see src.cvdp::preprocess_cvdp_cohort)
-        fields_cohort_window (List[str], optional): Column names for fields containing patient information to window for
-                                                    filtering latest extract.
-                                                    Defaults to [params.CVDP_PID_FIELD, params.CVDP_DOB_FIELD].
-        field_extract_date (str, optional): Column name for field field containing the extract date of the CVDP cohort event.
-                                                    Defaults to params.CVDP_EXTRACT_DATE.
-        (**args): Default function arguments as defined in params.params_util.
+        df (DataFrame): Dataframe output from CreatePatientCohortTable._preprocess_cvdp_store_data_cohort().
+        field_extract_date (str, optional): Column name for field field containing the extract date of the CVDP
+            cohort event.
+            Defaults to params.CVDP_EXTRACT_DATE.
+        add_ref_data (bool, optional): Switch to add REF data to the journal table (TRUE).
+            Defaults to params.SWITCH_CVDP_JOURNAL_ADD_REF_DATA.
+        fields_select (str, optional): List of fields to subset from the DataFrame, forms the base journal table.
+            Defaults to params.CVDP_JOURNAL_INPUT_COLUMNS.
+        field_explode (str, optional): Column containing the journal table entries.
+            Defaults to params.CVDP_JOURNAL_FIELD.
+        field_explode_select (str, optional): Columns within the journal table array to select and extract.
+            Defaults to params.CVDP_JOURNAL_EXPLODE_COLUMNS.
+        field_array_code (str, optional): Name of new array column.
+            Defaults to params.CODE_ARRAY_FIELD.
+        field_array_values (List[str], optional): List of fields to combine to make array.
+            Defaults to [params.CVDP_CODE_VALUE1_FIELD, params.CVDP_CODE_VALUE2_FIELD].
+        join_field (str, optional): Field from df, to join onto ref dataframe.
+            Defaults to params.CVDP_CODE_FIELD.
+        ref_join_field (str, optional): Field from reference data, to join to df.
+            Defaults to params.REF_CODE_FIELD.
+        fields_window_partition (List[str], optional): List of column names to partition the window
+            (deduplication) on.
+            Defaults to params.CVDP_JOURNAL_DEDUPLICATION_FIELDS.
+        col_hashed_key (str, optional): Column name for additional column containing primary key.
+            Defaults to params.CVDP_JOURNAL_PRIMARY_KEY.
+        fields_to_hash (List[str], optional): Column names to hash for primary key.
+            Defaults to params.CVDP_JOURNAL_HASHABLE_FIELDS.
 
     Returns:
-        DataFrame: Dataframe containing the processed journal table from eligible patient cohort data
-    """    
+        DataFrame: Dataframe containing the processed journal table from eligible patient cohort data, with primary key
+            derived from hashable columns.
+    """
     ## Explode Nested Structure
     df = cvdp_explode_journal_columns(df,fields_select,field_explode,field_explode_select)
     ## Create Journal Array
@@ -218,5 +243,7 @@ def preprocess_cvdp_journal(
     ## Conditional: Add REF Data
     if add_ref_data == True:
         df = join_ref_data(df,join_field,ref_join_field)
+    ## Add primary key (hashed)
+    df   = add_hashed_key(df,col_hashed_key,fields_to_hash)
     ## Return
     return df

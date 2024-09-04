@@ -79,7 +79,7 @@ The  **Create Patient Cohort Table** stage processes the two CVD Prevent (CVDP) 
 These two tables contain patients that have been identified in CVDP:
 
 - Annual: contains the snapshot taken from the CVDP patient database. This snapshot contains eligible patients (alive  **and** not-resolved of CVD) at the time of extraction:  **March 2020**.
-- Quarterly: contains the quarterly (~3 month) snapshots from the CVDP patient database. These snapshots contain eligible patients (alive  **and** not-resolved of CVD) at the time of extraction. The latest extraction is currently **March 2023**.
+- Quarterly: contains the quarterly (~3 month) snapshots from the CVDP patient database. These snapshots contain eligible patients (alive  **and** not-resolved of CVD) at the time of extraction. The latest extraction is currently **March 2024**.
 
 The final output from these two tables is a flat CVDP extract dataframe that is the union of the annual and quarterly tables. This is then deduplicated, ensuring a single event per-patient, per-extract-date, is kept.
 
@@ -215,7 +215,6 @@ Currently there are the following dataset-category pairings:
 | **hes\_apc** | episode | HES (APC) episode events are individual episodes extracted from the processed HES APC tables. Each event is assigned a primary diagnostic code (code) and an array of non-primary diagnostic codes (code\_array). A flag is added (flag) if the episode had a primary diagnostic code that was CVD related (e.g. HEARTATTACK, STROKE), a flag added for events with CVD as a non-primary (associated) code (CVD\_NON\_PRIMARY) and no flag (null) where CVD related diagnostic codes have not been found in the event.  |
 | **hes\_apc** | spell | HES (APC) spell events are events that represent a collection of episodes. For example, a spell may contain several episodes, and the spell start and end dates will will the start date of the first episode to the last date of the last episode.  Spells have flags associated with them (flag) that represent if there were episode(s) that related to heart attacks (HEARTATTACK), stroke (STROKE) or had multiple distinct CVD events (MULTIPLE).  |
 | **dars\_bird\_deaths** | death | DARS events are patient death events and only appear if a patient has died. These events are flagged if the underlying cause of death codes (ICD10) contain any CVD related codes: they are flagged with the respective CVD death outcome (e.g. HEARTATTACK).  |
-| **cvdp\_smoking\_status** | smoking\_status | Smoking status updates extracted from the journal table for eligible patients (identified from the eligible cohort table). The events are assigned a flag based on what smoking status category their SNOMED code falls into. The most recent of each category for each person is kept  and the date of the oldest entry in each category for each person is kept as the start date (record\_start\_date). |
 
 The events table is used to create the base (non-enriched) patient table, and can be linked to the patient table on the primary key of person\_id, birth\_date.
 

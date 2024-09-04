@@ -3,13 +3,13 @@
 
 # This script is the singular method for choosing which params to use and setting up the 'params' object.
 
-# The global paramter 'PARAMS_PATH' must be provided. Set it to 'default' to read the default params as 
+# The global paramter 'PARAMS_PATH' must be provided. Set it to 'default' to read the default params as
 # in params/params_util.
 
-# To read a different params file set 'PARAMS_PATH' to the relative path of the notebook to be used as the 
+# To read a different params file set 'PARAMS_PATH' to the relative path of the notebook to be used as the
 # params. There are multiple ways to create such a notebook, see params_util for more details.
 
-# After running this script all params values are available from the created 'params' object, such as 
+# After running this script all params values are available from the created 'params' object, such as
 # 'params.DATABASE_NAME'.
 
 # COMMAND ----------
@@ -35,7 +35,7 @@ else:
 if 'params' in globals() and params.params_path != new_params.params_path:
   raise AssertionError(f'The PARAMS_PATH ({PARAMS_PATH}) has changed. Stored params path has changed '
                        f'from {params.params_path} to {new_params.params_path}. The defined params values '
-                       f'must not change while the pipeline is running.')  
+                       f'must not change while the pipeline is running.')
 
 # COMMAND ----------
 

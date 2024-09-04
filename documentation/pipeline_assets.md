@@ -27,7 +27,7 @@ Assets in the pipeline can be broadly categorised into three groups:
 
 **Bronze**
 
-These are the cleaned, filtered and processed raw data assets. They are the pipeline assets that are produced as part of the CreateEligibleCohortStage and PreprocessRawDataStage pipeline stages. The raw data processed to produce these assets include  **HES, DARS,** **PCAREMEDS,** **CVDP Annual** and **CVDP Quarterly** extracts.
+These are the cleaned, filtered and processed raw data assets. They are the pipeline assets that are produced as part of the CreateEligibleCohortStage and PreprocessRawDataStage pipeline stages. The raw data processed to produce these assets include  **HES, DARS,** **CVDP Annual** and **CVDP Quarterly** extracts.
 
 **Silver**
 
@@ -75,7 +75,7 @@ The data spec for the events table is given below.
 | **Event start date** | record\_start\_date | Event start date | No | No | Date | FALSE |
 | **Event end date** | record\_end\_date | Event end date, same as start date if event occurred within a single day.  | No | No | Date | TRUE |
 | **LSOA** | lsoa | LSOA on event date | No | No | String | TRUE |
-| **Ethnicity** | event\_source\_ethnicity | Ethnic group at source event | No | No | String | TRUE |
+| **Ethnicity** | ethnicity | Ethnic group at source event | No | No | String | TRUE |
 | **Inclusion code** | code | Inclusion diagnostic code (SNOMED, ICD10, datasource flag) | No | No | String | TRUE |
 | **Flag** | flag | Event categorisation information | No | No | String | TRUE|
 | **Code Array** | code\_array | List of codes that are associated with the record (e.g. additional SNOMED, ICD10 codes) but are not the primary code for the event | No | No | String | TRUE |
@@ -97,7 +97,7 @@ The data spec for the patient table is given below.
 | **Sex** | sex | Sex from patient's latest CVDP extract | No | No | String | TRUE |
 | **LSOA** | lsoa | LSOA from patient's latest CVDP extract | No | No | String | TRUE |
 | **cohort** | cohort | Cohort flag from patient's latest CVDP extract | No | No | String | FALSE |
-| **Ethnicity** | ethinicity | Ethnic group from patient's latest CVDP extract\* | No | No | String | TRUE |
+| **Ethnicity** | ethnicity | Ethnic group from patient's latest CVDP extract\* | No | No | String | TRUE |
 | **xxx Diagnosis Date** | xxx\_diagnosis\_date | Earliest diagnosis date for xxx, null if no xxx diagnosis available | No | No | Date | TRUE |
 | **Date of Death** | date\_of\_death | Date of Death, null if not available | No | No | Date | TRUE |
 | **Death flag** | death\_flag | Flag for primary cause of death is Heart Attack, Stroke or other CVD, null if date of death not available | No | No | String | TRUE |
@@ -110,4 +110,5 @@ The data spec for the patient table is given below.
 | **Hypertension risk group** | hyp\_risk\_group | Hypertension patient risk group calculated at patient's latest CVDP extract | No | No | Int | TRUE |
 
 \* This is the case if the demographic enhancement switch is set to FALSE. If enhanced switch is set to TRUE, the ethnicity is taken fro the patient's latest CVDP extract. Where this is null, ethnicity is [enhanced](./ethnicity_enhance.md) from additional datasets.
+
 

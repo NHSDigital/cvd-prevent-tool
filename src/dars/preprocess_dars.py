@@ -60,7 +60,7 @@ def filter_dars_region(
     Args:
         df (DataFrame): Dataframe of raw data
         residence_field (str, optional): Column name for field containing prefixes of LSOA values. Defaults to params.DARS_RESIDENCE_FIELD.
-        location_field (str, optional): Column name for field containing full LSOA values. Defaults to params.DARS_LOCATION_FIELD. 
+        location_field (str, optional): Column name for field containing full LSOA values. Defaults to params.DARS_LOCATION_FIELD.
         region_prefix (Optional[str], optional): String prefix indicating region, i.e. 'E' filters records in England. Defaults to 'E'.
 
     Returns:
@@ -191,8 +191,8 @@ def clean_dars(
         nhs_number_origin_field_2 (str, optional): Column name of field containing NHS numbers (decommissioned). Defaults to params.DARS_PID_ORIGIN_FIELD_2.
 
     Returns:
-        DataFrame: Cleaned DARS dataframe. 
-    """    
+        DataFrame: Cleaned DARS dataframe.
+    """
     df_dars = filter_dars_region(df, location_field, residence_field)
 
     df_dars_current = remove_cancelled_dars_records(
@@ -224,7 +224,7 @@ def create_assoc_cod_flags(
     assoc_join_str: str = "_assoc_",
 ) -> DataFrame:
     """create_assoc_cod_flags
-    Creates a column containing the assoiated cause of death flags (alongside the primary cause of death) 
+    Creates a column containing the assoiated cause of death flags (alongside the primary cause of death)
 
     Args:
         df (DataFrame): DARS containing dataframe
@@ -235,7 +235,7 @@ def create_assoc_cod_flags(
 
     Returns:
         DataFrame: DARS containing dataframe with associated cause of death fields
-    """    
+    """
     for flag_type, code_list in code_map.items():
         flag_type_lwr = flag_type.lower()
         df = df.withColumn(
@@ -277,7 +277,7 @@ def create_cod_flags(
 
     Returns:
         DataFrame: Processed dataframe with new column flagging the cause of death for each patient.
-    """    
+    """
     df_outcomes = df.withColumn(flag_field, F.lit(params.NON_CVD_DEATH))
 
     for code_name, code_list in code_map.items():
@@ -299,33 +299,121 @@ def create_cod_flags(
 
 # COMMAND ----------
 
-
 def dedup_dars(
     df: DataFrame,
-    partition_field: str = params.DARS_PID_FIELD,
-    order_field: str = params.DARS_DOD_FIELD,
+    partition_fields: List[str] = [params.DARS_PID_FIELD, params.DARS_DOB_FIELD],
+    death_field: str = params.DARS_DOD_FIELD,
+    reg_date_field: str = params.DARS_REG_FIELD,
+    id_field: str = params.DARS_ID_FIELD
 ) -> DataFrame:
     """dedup_dars
-    Deduplicates the DARS dataframe on provided fields (window function based)
+    Deduplicates the DARS dataframe where multiple records are present for a single partition field value (NHS number).
+    The deduplication method is as follows:
+        1) Partition the records on NHS Number
+        2) Order multiple records on date of death (ascending) and registration date of death (descending)
+        3) As a final catch-all, an additional round of deduplication ordering on the dataset primary key (ascending)
 
     Args:
         df (DataFrame): Dataframe of raw data
-        partition_field (str, optional): Field to partition dataframe on (window function). Defaults to params.DARS_PID_FIELD.
-        order_field (str, optional): Field to order window partition on (window function). Defaults to params.DARS_DOD_FIELD.
+        partition_fields (List[str], optional): List of fields (nhs number and date of birth) to partition dataframe on (window function).
+            Defaults to [params.DARS_PID_FIELD, params.DARS_DOB_FIELD.
+        death_field (str, optional): Field (death date) to order window partition on, ascending.
+            Defaults to params.DARS_DOD_FIELD.
+        reg_date_field (str, optional): Field (death registration date) to order window partition on, descending.
+            Defaults to params.DARS_REG_FIELD.
+        id_field (Str, optional): Field (pre-exisisting DARS record ID) to order window partition on, ascending. Used in the case
+            where deduplication does not remove all deduplicated records.
+            Defaults to params.DARS_ID_FIELD.
+        
 
     Returns:
-        DataFrame: De-duplicated dataframe
-    """    
+        df_dedup (DataFrame): De-duplicated dataframe using NHS Number and Date of Birth as the dataframe partition.
+    """
+    
+    # [1] Deduplicate records
+    ## Partition: NHS Number
+    ## Order: Date of death (ascending); Registration date (descending)
     dedup_window = (
-        Window().partitionBy(partition_field).orderBy(F.col(order_field).asc())
+        Window()
+        .partitionBy(*partition_fields)
+        .orderBy(F.col(death_field).asc(),F.col(reg_date_field).desc())
     )
     df_dedup = (
-        df.withColumn("_rn", F.row_number().over(dedup_window))
+        df
+        .withColumn("_rn", F.rank().over(dedup_window))
         .filter(F.col("_rn") == 1)
         .drop("_rn")
     )
+    
+    # [2] Catch-all for remaining multiple records
+    ## Partition: NHS Number
+    ## Order: Primary Key (ascending)
+    dedupe_window_2 = (
+        Window()
+        .partitionBy(*partition_fields)
+        .orderBy(F.col(id_field).asc())
+    )
+    df_dedup = (
+        df_dedup
+        .withColumn("_rn", F.row_number().over(dedupe_window_2))
+        .filter(F.col("_rn") == 1)
+        .drop("_rn")
+    )
+    
+    # Return DataFrame
     return df_dedup
 
+
+# COMMAND ----------
+
+def add_dars_record_id(
+        df: DataFrame,
+        field_record_id: str = params.RECORD_ID_FIELD,
+        field_dars_id: str = params.DARS_ID_FIELD,
+        field_assoc_record_id: str = params.ASSOC_REC_ID_FIELD,
+        field_pid: str = params.DARS_PID_FIELD,
+        field_dob: str = params.DARS_DOB_FIELD
+) -> DataFrame:
+    '''
+    add_dars_record_id 
+    Creates a record ID from the hash of person ID and date of birth to ensure record ID consistency when a person's death record is updated.
+    Takes pre-existing DARS record ID and saves in associated record ID column.
+
+    Args:
+        df (DataFrame): cleaned and deduped DARS DataFrame.
+        field_record_id (str, optional): Column to contain hashed primary key.
+          Defaults to params.RECORD_ID_FIELD.
+        field_dars_id (str, optional): Column containing pre-existing DARS record ID.
+          Defaults to params.DARS_ID_FIELD.
+        field_assoc_record_id (str, optional): column to rename pre-existing DARS record ID to.
+          Defaults to params.ASSOC_REC_ID_FIELD.
+        field_pid (str, optional): column containing NHS number.
+          Defaults to params.DARS_PID_FIELD.
+        field_dob (str, optional): column containing date of birth.
+          Defaults to params.DARS_DOB_FIELD.
+
+    Returns:
+        DataFrame: dars table with hashed primary key record id and other record id stored in associated record id column 
+    '''
+    
+    df = df.withColumnRenamed(field_dars_id, field_assoc_record_id)
+    df = add_hashed_key(df, field_record_id, [field_pid,field_dob])
+
+    return df
+
+# COMMAND ----------
+
+def check_unique_identifiers_dars(
+        df,
+        record_id = params.RECORD_ID_FIELD,
+):
+      hash_check = check_unique_values(
+          df = df,
+          field_name = record_id)
+      if hash_check == True:
+          pass
+      else:
+          raise Exception(f'ERROR: Non-unique hash values in preprocessed DARS. Pipeline stopped, check hashable fields.')
 
 # COMMAND ----------
 
@@ -336,30 +424,46 @@ def preprocess_dars(
     dars_code_map: Dict[str, str] = params.DARS_ICD10_CODES_MAP,
     dars_underlying_code_field: str = params.DARS_UNDERLYING_CODE_FIELD,
     dars_comorbs_field: str = params.DARS_COMORBS_CODES_FIELD,
-    dars_partition_field: str = params.DARS_PID_FIELD,
-    dars_order_field: str = params.DARS_DOD_FIELD,
+    dars_pid_field: str = params.DARS_PID_FIELD,
+    dars_death_field: str = params.DARS_DOD_FIELD,
+    dars_reg_date_field: str = params.DARS_REG_FIELD,
+    dars_id_field: str = params.DARS_ID_FIELD,
     dars_assoc_cod_flags: bool = True,
+    dars_output_columns: List[str] = params.DARS_PREPROCESS_COLUMNS,
+    dars_dob_field: str  = params.DARS_DOB_FIELD,
+    field_record_id: str = params.RECORD_ID_FIELD,
+    field_assoc_record_id: str = params.ASSOC_REC_ID_FIELD
 ) -> DataFrame:
     """preprocess_dars
     Main function for preprocessing the DARS dataframe to feed into the PreprocessRawDataStage.
 
     Args:
         df (DataFrame): Raw DARS dataframe
-        dars_flag_field (str, optional): See preprocess_dars::create_cod_flags. Defaults to params.FLAG_FIELD.
-        dars_code_map (Dict[str, str], optional): See preprocess_dars::create_cod_flags. Defaults to params.DARS_ICD10_CODES_MAP.
-        dars_underlying_code_field (str, optional): See preprocess_dars::create_cod_flags. Defaults to params.DARS_UNDERLYING_CODE_FIELD.
-        dars_comorbs_field (str, optional): See preprocess_dars::create_cod_flags. Defaults to params.DARS_COMORBS_CODES_FIELD.
-        dars_partition_field (str, optional): See preprocess_dars::dedup_dars. Defaults to params.DARS_PID_FIELD.
-        dars_order_field (str, optional): See preprocess_dars::dedup_dars. Defaults to params.DARS_DOD_FIELD.
-        dars_assoc_cod_flags (bool, optional): See preprocess_dars::create_cod_flags. Defaults to True.
+        dars_flag_field (str, optional): String containing the name of the new column to be created. Defaults to params.FLAG_FIELD.
+        dars_code_map (Dict[str, str], optional): String containing the name of the new column to be created. Defaults to params.DARS_ICD10_CODES_MAP.
+        dars_underlying_code_field (str, optional): Field containing underlying cause of death code. Defaults to params.DARS_UNDERLYING_CODE_FIELD.
+        dars_comorbs_field (str, optional): Field containing concatenation of all codes included in mortality data. Defaults to params.DARS_COMORBS_CODES_FIELD.
+        dars_pid_field (str, optional): Field (nhs number) to partition dataframe on (window function). Defaults to params.DARS_PID_FIELD.
+        dars_death_field (str, optional): Field (death date) to order window partition on, ascending. Defaults to params.DARS_DOD_FIELD.
+        dars_reg_date_field (str, optional): Field (death registration date) to order window partition on, descending. Defaults to params.DARS_REG_FIELD.
+        dars_id_field (str, optional): Field (dataset primary key) to order winfow partition on, ascending. Used in the case
+            where deduplication does not remove all deduplicated records. Defaults to params.DARS_ID_FIELD.
+        dars_assoc_cod_flags (bool, optional): Use the concatenated fields in attributing cause of death. Defaults to True.
+        dars_output_columns (List[str], optional): Define columns to select for returned processed DARS dataframe.
+            Defaults to params.DARS_PREPROCESS_COLUMNS
+        dars_dob_field (str, optional): Field containg patient date of birth. Defaults to params.DARS_DOB_FIELD.
+        field_record_id (str, optional): Column name to add created record id to. Defaults to params.RECORD_ID_FIELD.
+        field_assoc_record_id (str, optional): Column name to rename pre-exisiting DARS record id field to. Defaults to params.ASSOC_REC_ID_FIELD
 
     Returns:
         DataFrame: Processed DARS dataframe, for use in PreprocessRawDataStage
-    """    
-    df_dars_clean = clean_dars(df)
+    """
+    # Clean NHS numbers
+    df = clean_dars(df)
 
-    df_dars_clean_outcomes = create_cod_flags(
-        df=df_dars_clean,
+    # Create the cause of death flags
+    df = create_cod_flags(
+        df=df,
         flag_field=dars_flag_field,
         code_map=dars_code_map,
         underlying_code_field=dars_underlying_code_field,
@@ -367,10 +471,32 @@ def preprocess_dars(
         assoc_cod_flags=dars_assoc_cod_flags,
     )
 
-    df_dars_dedup = dedup_dars(
-        df=df_dars_clean_outcomes,
-        partition_field=dars_partition_field,
-        order_field=dars_order_field,
+    # Deduplicate death entries
+    df = dedup_dars(
+        df=df,
+        partition_fields=[dars_pid_field,dars_dob_field],
+        death_field=dars_death_field,
+        reg_date_field=dars_reg_date_field,
+        id_field=dars_id_field,
     )
 
-    return df_dars_dedup.select(params.DARS_PREPROCESS_COLUMNS)
+    df = add_dars_record_id(
+        df = df,
+        field_record_id=field_record_id,
+        field_dars_id=dars_id_field,
+        field_assoc_record_id=field_assoc_record_id,
+        field_pid=dars_pid_field,
+        field_dob=dars_dob_field
+    )
+
+    # Select columns to return final dars dataframe
+    df = df.select(dars_output_columns)
+    
+    #check new record ID is unique
+    check_unique_identifiers_dars(
+      df = df,
+      record_id = field_record_id
+    )
+
+    # Return DARS dataframe
+    return df

@@ -23,19 +23,19 @@ from dsp.validation.validator import compare_results
 
 suite = FunctionTestSuite()
 
-# COMMAND ----------
-
 ## The following are fake people and data created for test purposes
+
+# COMMAND ----------
 
 @suite.add_test
 def test_create_base_table():
     '''test_create_base_table
-    
+
     Test of sub-method _create_base_table in the CreatePatientTableStage class. The extended functionality of
     extract_patient_events is captured in create_patient_table_lib_tests::test_extract_patient_events.add().
-    Test returns a single-row-per-patient, pulling cohort events (ONLY) from the events table. 
+    Test returns a single-row-per-patient, pulling cohort events (ONLY) from the events table.
     '''
-    
+
     # TEST PARAMETERS
     @dataclass(frozen = True)
     class TestParams(ParamsBase):
@@ -135,8 +135,8 @@ def test_create_base_table():
 @suite.add_test
 def test_add_demographic_data():
     '''test_add_demographic_data
-    
-    Test of sub-method _add_demographic_data in the CreatePatientTableStage class. 
+
+    Test of sub-method _add_demographic_data in the CreatePatientTableStage class.
     Test returns the patient table with additional enhanced demographic columns
     '''
     # TEST PARAMETERS
@@ -183,7 +183,7 @@ def test_add_demographic_data():
         T.StructField('record_date', T.DateType(), False),
         T.StructField('test_demographic', T.StringType(), False)
     ])
-    
+
     expected_schema = T.StructType([
         T.StructField('person_id', T.StringType(), False),
         T.StructField('birth_date', T.DateType(), False),
@@ -195,17 +195,17 @@ def test_add_demographic_data():
     empty_schema = T.StructType([
         T.StructField('idx', T.IntegerType(), False),
     ])
-    
+
     # INPUT PATIENT TABLE
     df_patient = spark.createDataFrame([
         ('001',date(2000,1,1),'CVD001',date(2022,1,1), 'P0001'),
         ('002',date(2000,1,2),'CVD002',date(2022,1,2), 'P0002'),
     ], patient_schema)
-    
+
     #BLANK TABLES - NOT USED IN THIS FUNCTION
     df_indicators = spark.createDataFrame([], empty_schema)
     df_events = spark.createDataFrame([], empty_schema)
-    
+
     df_demographics = spark.createDataFrame([
         ('001',date(2000,1,1),'test_ds1',date(2022,1,1), 'A'),
     ], demographics_schema)
@@ -242,7 +242,7 @@ def test_add_demographic_data():
 
 @suite.add_test
 def test_add_deaths_data():
-    
+
     @dataclass(frozen = True)
     class TestParams(ParamsBase):
         EVENTS_DARS_DATASET = 'test_deaths'
@@ -326,27 +326,27 @@ def test_add_deaths_data():
         df_actual =  stage._data_holder['patient']
 
     assert compare_results(df_actual, df_expected, join_columns=['person_id','birth_date'])
-    
+
 
 # COMMAND ----------
 
 @suite.add_test
 def test_add_hospitalisation_data():
     """test_add_hospitalisation_data()
-    
+
     Testing of the patient table stage method _add_hospitalisation_data(). Events table contains HES APC Spell events,
     including stroke and heartattack, for patients in the patient table. The mode of create_patient_table_lib::add_stroke_mi_information()
     is set to keep events for dead and alive patient's, and inclusive date of death filtering (prior to or included date of death).
-    
+
     Variables:
         keep_nulls == True
         keep_inclusive == True
-    
+
     Associated:
         pipeline/create_patient_table::add_hospitalisation_data()
         pipeline/create_patient_table_lib::add_stroke_mi_information()
     """
-    
+
     # Test Parameters
     ## Define test parameter values
     @dataclass(frozen = True)
@@ -359,7 +359,7 @@ def test_add_hospitalisation_data():
         DOB_FIELD = 'birth_date'
         EVENTS_DARS_CATEGORY = 'death'
         EVENTS_DARS_DATASET = 'test_deaths'
-        EVENTS_HES_SPELL_CATEGORY= 'spell'
+        EVENTS_HES_APC_SPELL_CATEGORY= 'spell'
         FLAG_FIELD = 'flag'
         ASSOC_FLAG_FIELD = 'flag_assoc'
         COUNT_FLAG = 'count'
@@ -434,7 +434,7 @@ def test_add_hospitalisation_data():
         # Patient 4 (Has Died, Invalid Records)
         (4,date(2004,4,4),'hes_apc','spell',date(2024,1,2),'HEARTATTACK',None),                 # Remove - After Death
         # Patient 5 (Alive, Valid and Invalid Records)
-        (5,date(2005,5,5),'hes_apc','spell',date(2015,1,1),'MULTIPLE',['HEARTATTACK','STROKE']),# Keep 
+        (5,date(2005,5,5),'hes_apc','spell',date(2015,1,1),'MULTIPLE',['HEARTATTACK','STROKE']),# Keep
         (5,date(2005,5,5),'hes_apc','spell',date(2015,1,1),'MULTIPLE',['no_cvd','hf']),         # Remove - No valid flags
         # Patient 6 (Alive, Invalid Records)
         (6,date(2006,6,6),'hes_apc','spell',date(2016,1,1),'hf',None),                          # Remove - No valid flags
@@ -474,7 +474,7 @@ def test_add_hospitalisation_data():
 
 @suite.add_test
 def test_add_patient_flags():
-  
+
     @dataclass(frozen = True)
     class TestParams(ParamsBase):
         EVENTS_DARS_DATASET = 'test_deaths'
@@ -488,8 +488,8 @@ def test_add_patient_flags():
         FLAG_FIELD = 'flag'
         DEATH_FLAG = 'death_flag'
         HES_APC_TABLE = 'hes_apc'
-        EVENTS_HES_SPELL_CATEGORY= 'spell'
-        EVENTS_HES_EPISODE_CATEGORY = 'episode'
+        EVENTS_HES_APC_SPELL_CATEGORY= 'spell'
+        EVENTS_HES_APC_EPISODE_CATEGORY = 'episode'
         STROKE_FLAG = 'STROKE'
         HEARTATTACK_FLAG = 'HEARTATTACK'
         COUNT_FLAG = 'count'
@@ -499,8 +499,8 @@ def test_add_patient_flags():
         MAX_MI_DATE = 'max_mi_date'
         GLOBAL_JOIN_KEY = ['person_id','birth_date']
 
-    test_params = TestParams()     
-  
+    test_params = TestParams()
+
     df_patient_input = spark.createDataFrame([
     (1, date(2001,1,1) ,date(2024,1,1)),
     (2, date(2002,2,2) ,date(2024,1,1)),
@@ -509,14 +509,14 @@ def test_add_patient_flags():
   ]
   ,['person_id','birth_date','death_date']
   )
-    
+
     df_flags_input = spark.createDataFrame([
       (1, date(2001,1,1), date(2020,1,1)),
       (2, date(2002,2,2), date(2020,1,1)),
       (3, date(2003,3,3), date(2020,1,1)),
       (4, date(2004,4,4), date(2020,1,1)),
     ], ['person_id', 'birth_date', 'AF_diagnosis_date'])
-    
+
     df_expected = spark.createDataFrame([
       (1, date(2001,1,1) ,date(2024,1,1), date(2020,1,1)),
       (2, date(2002,2,2) ,date(2024,1,1), date(2020,1,1)),
@@ -531,11 +531,11 @@ def test_add_patient_flags():
       (4,'spell',   date(2004,4,4), date(2020,1,1),'HEARTATTACK','hes_apc'),
     ],
     ['person_id','category', 'birth_date', 'record_start_date', 'flag','dataset'])
-  
-    
+
+
     def temp_create_patient_table_flags(df, events):
       return df
-    
+
     with FunctionPatch('params',test_params):
       with FunctionPatch('create_patient_table_flags',temp_create_patient_table_flags):
         stage = CreatePatientTableStage(events_table_input = df_events_input,
@@ -547,7 +547,7 @@ def test_add_patient_flags():
         stage._data_holder['events'] = df_events_input
         stage._add_patient_flags()
         df_actual =  stage._data_holder['patient']
-    
+
     assert compare_results(df_actual, df_expected, join_columns=['person_id','birth_date'])
 
 # COMMAND ----------
@@ -557,10 +557,10 @@ def test_add_hypertension_data():
     '''
     create_patient_table::_add_hypertension_data
     Test takes a patient table (containing diagnostic flags) and an events table (containing many
-    event types, including blood pressure measurement events) and produces a patient table with an 
+    event types, including blood pressure measurement events) and produces a patient table with an
     appended column of the assigned/calculated hypertension risk group.
     '''
-    
+
     @dataclass(frozen = True)
     class TestParams(ParamsBase):
         CVDP_HYP_RISK_FIELD = 'htn_risk_group'
@@ -591,9 +591,9 @@ def test_add_hypertension_data():
         ('001',date(2000,1,1),date(2020,1,1),'test_ds2','foo','cat','meow'),
         ('002',date(2000,1,2),date(2017,6,1),'cvd','bp','90/60','A'),
         ('002',date(2000,1,2),date(2019,6,1),'cvd','bp','100/70','A'),
-        ('002',date(2000,1,2),date(2019,8,1),'cvd','bp','130/90','C'), 
-        ('002',date(2000,1,2),date(2011,8,1),'test_ds1','foo','horse','neigh'), 
-        ('002',date(2000,1,2),date(2017,8,1),'test_ds1','fee','bird','chirp'), 
+        ('002',date(2000,1,2),date(2019,8,1),'cvd','bp','130/90','C'),
+        ('002',date(2000,1,2),date(2011,8,1),'test_ds1','foo','horse','neigh'),
+        ('002',date(2000,1,2),date(2017,8,1),'test_ds1','fee','bird','chirp'),
         ('003',date(2000,1,3),date(2009,1,1),'cvd','bp','100/100','F'),
         ('003',date(2000,1,3),date(2011,1,1),'cvd','bp','90/90','A'),
         ('003',date(2000,1,3),date(2006,1,1),'cvd','bp','80/80','C'),
@@ -634,7 +634,7 @@ def test_add_hypertension_data():
 
 @suite.add_test
 def test_format_patient_table():
-    
+
     df_input = spark.createDataFrame([
         (0, 'frog', 'ribbit', 'green'),
         (1, 'cat', 'meow', 'ginger')
@@ -652,7 +652,7 @@ def test_format_patient_table():
         patient_table_output = None
         )
     stage._output_fields = ['idx','animal','colour']
-    stage._data_holder['patient'] = df_input 
+    stage._data_holder['patient'] = df_input
     stage._format_patient_table()
     df_actual = stage._data_holder['patient']
 

@@ -28,30 +28,32 @@ suite = FunctionTestSuite()
 
 ## The following are fake people and data created for test purposes
 
+## The following are fake people and data created for test purposes
+
 # COMMAND ----------
 
 @suite.add_test
 def test_ensure_england_lsoa():
-    
+
     df_input = spark.createDataFrame([
         (0, 'E00001'),
         (1, 'X00001'),
         (2, None)
     ], ['idx','lsoa'])
-    
+
     df_expected = spark.createDataFrame([
         (0, 'E00001'),
     ], ['idx','lsoa'])
-    
+
     df_actual = ensure_england_lsoa(df_input, 'lsoa')
     assert compare_results(df_actual, df_expected, join_columns = ['idx'])
-    
+
 
 # COMMAND ----------
 
 @suite.add_test
 def test_ensure_int_type():
-    
+
     input_schema = T.StructType([
     T.StructField('index', T.StringType(), True),
     T.StructField('i_int', T.IntegerType(), True),
@@ -92,27 +94,27 @@ def test_ensure_int_type():
 
     df_actual = df
     assert compare_results(df_actual, df_expected, join_columns=['index'])
-    
+
 
 # COMMAND ----------
 
 @suite.add_test
 def test_run_field_mapping_str():
-    
+
     df_input = spark.createDataFrame([
         (0, 'A', '1'),
         (1, 'B', '2'),
         (2, 'C', '3'),
         (3, 'D', '4'),
     ], ['idx','pid','num'])
-    
+
     df_expected = spark.createDataFrame([
         (0, 'A', '1'),
         (1, 'B', '2'),
         (2, 'C', '3'),
         (3, 'D', '4'),
     ], ['idx','pid','number'])
-    
+
     df_actual = _run_field_mapping(df_input, 'number', 'num')
     assert compare_results(df_actual, df_expected, join_columns = ['idx'])
 
@@ -120,7 +122,7 @@ def test_run_field_mapping_str():
 
 @suite.add_test
 def test_run_field_mapping_func():
-    
+
     def make_lower_case(df: DataFrame, col_name: str):
         return df.withColumn(col_name, F.lower(F.col(col_name)))
 
@@ -153,30 +155,30 @@ def test_run_field_mapping_func():
 
 @suite.add_test
 def test_run_field_mapping_lit():
-    
+
     df_input = spark.createDataFrame([
         (0, 'A', '1'),
         (1, 'B', '2'),
         (2, 'C', '3'),
         (3, 'D', '4'),
     ], ['idx','pid','num'])
-    
+
     df_expected = spark.createDataFrame([
         (0, 'A', '1', 'foo'),
         (1, 'B', '2', 'foo'),
         (2, 'C', '3', 'foo'),
         (3, 'D', '4', 'foo'),
     ], ['idx','pid','num','data'])
-    
+
     df_actual = _run_field_mapping(df_input, 'data', F.lit('foo'))
     assert compare_results(df_actual, df_expected, join_columns = ['idx'])
-    
+
 
 # COMMAND ----------
 
 @suite.add_test
 def test_format_source_data_to_combined_schema():
-    
+
     df_input = spark.createDataFrame([
         ('0', date(2020, 3, 1), '0', 'I64', date(1980, 1, 1)),
         ('1', date(2020, 3, 2), '1', 'I24', date(1980, 1, 2)),
@@ -200,28 +202,28 @@ def test_format_source_data_to_combined_schema():
 
     event_entry = EventsStageDataEntry(
         dataset_name = 'test_df',
-        context_key = None, 
+        context_key = None,
         processing_func = None,
         mapping = EventsStageColumnMapping(
-            pid_field = 'PID', 
+            pid_field = 'PID',
             dob_field = 'DOB',
             age_field = None,
             sex_field = None,
-            dataset_field = None, 
+            dataset_field = None,
             category_field = None,
             record_id_field = 'EID',
             record_start_date_field = 'REC',
             record_end_date_field = None,
-            lsoa_field = None, 
+            lsoa_field = None,
             ethnicity_field = None,
-            code_field = 'CODE', 
-            flag_field = None, 
+            code_field = 'CODE',
+            flag_field = None,
             code_array_field = None,
             flag_array_field = None,
-            assoc_record_id_field = None, 
+            assoc_record_id_field = None,
         ))
 
-    df_actual = format_source_data_to_combined_schema(event_entry, df_input, output_fields) 
+    df_actual = format_source_data_to_combined_schema(event_entry, df_input, output_fields)
 
     assert compare_results(df_actual, df_expected, join_columns=[params.PID_FIELD])
 

@@ -96,6 +96,14 @@ This is the "main" parameters notebook. It is where the dataclass is defined, an
 
 This notebook  **only** contains definitions of clinical coded variables. Currently, these are limited to SNOMED and ICD-10 codes.
 
+**[params\_pipeline\_assets](../params/params_pipeline_assets.py)**
+
+This notebook **only** contains definitions of the assets in the pipeline as a dictionary (where the key is the pipeline asset reference and the value is the pipeline asset name).
+
+**[params\_table\_schemas](../params/params_table_schemas.py)**
+
+This notebook **only** contains the dataframe expected schema definitions (column names and datatypes) for the **events** and **patient** table. 
+
 ## Running the Pipeline
 
 
